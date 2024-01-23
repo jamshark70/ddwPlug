@@ -72,7 +72,22 @@
 	}
 }
 
-// + Function {
-// 	preparePlugBundle { |dest, bundle, args, controlDict|
-// 	}
-// }
++ Function {
+	preparePlugBundle { |dest, bundle, args, controlDict|
+		var def = this.asSynthDef/*(name: )*/;
+		var node;
+		bundle.addPrepare([\d_recv, def.asBytes]);
+		def.allControlNames.do(_.postln);
+		node = Synth.basicNew(def.name, dest.server);
+		bundle.add(node.newMsg(
+			dest.group,
+			args,
+			\addToTail
+		));
+		OSCFunc({
+			dest.server.sendMsg(\d_free, def.name);
+		}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
+		.oneShot;
+		^node
+	}
+}

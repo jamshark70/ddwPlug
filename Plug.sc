@@ -67,41 +67,67 @@ Cable {
 	// I think this is asPluggable?
 
 	*new { |source, args, rate = \control, numChannels = 1|
-		^super.newCopyArgs(source, args, rate, numChannels).init
+		^super.newCopyArgs(source, args, rate, numChannels) // .init
 	}
 
-	init {
-		// nodes = IdentitySet.new;
+	*shared { |source, args, rate = \control, numChannels = 1|
+		^this.new(source, args, rate, numChannels).prConcrete_(true)
 	}
+
+	// init {
+	// 	// nodes = IdentitySet.new;
+	// }
 
 	free {
-		bus.removeClient(this);
+		if(node.notNil) {
+			node.server.sendBundle(nil,
+				[\error, -1],
+				node.freeMsg,
+				[\error, -2]
+			);
+			bus.removeClient(this);
+			bus = node = nil;
+		};
 		// nodes.do { |node| node.removeDependant(this) };
 	}
 
 	asPluggable { |dest, bundle, controlDict|
 		if(isConcrete) {
-			bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
+			if(bus.isNil) {
+				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 
-			// preparation messages, bundle messages
-			node = source.preparePlugBundle(
-				dest,
-				bundle,
-				args.asOSCPlugArray(dest, bundle, controlDict) ++ [out: bus],
-				controlDict
-			);
+				// preparation messages, bundle messages
+				node = source.preparePlugBundle(
+					dest,
+					bundle,
+					args.asOSCPlugArray(dest, bundle, controlDict)
+					++ [out: bus, i_out: bus],
+					controlDict
+				);
+			};
 
 			// if(nodes.includes(dest).not) {
 			// 	nodes.add(dest);
 			// };
+			// these are all Sets so multiple adds are OK (no redundancy)
 			bus.addClient(this);
-			// it's a Set so multiple adds are OK (no redundancy)
 			bus.addClient(dest);
 			dest.addDependant(this);
 			dest.addDependant(bus);
-			^bus.asMap  // also need multichannel
+			^this.asMap
 		} {
 			^this.concreteInstance.asPluggable(dest, bundle, controlDict)
+		}
+	}
+
+	asMap {
+		var rateLetter = bus.rate.asString.first;
+		^if(bus.numChannels > 1) {
+			Array.fill(bus.numChannels, { |i|
+				(rateLetter ++ (bus.index + i)).asSymbol
+			})
+		} {
+			bus.asMap
 		}
 	}
 
@@ -116,13 +142,8 @@ Cable {
 	update { |obj, what ... args|
 		switch(what)
 		{ \didFree } {
+			this.free;
 			obj.removeDependant(this);
-			node.server.sendBundle(nil,
-				[\error, -1],
-				node.freeMsg,
-				[\error, -2]
-			);
-			bus.removeClient(this);
 		}
 	}
 }

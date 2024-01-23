@@ -94,3 +94,29 @@ Object.dependantsDictionary.keysValuesDo { |key, value| [key, value].postln }; "
 [localhost, IdentitySet[a SimpleController]]
 [OSCFunc(/status.reply, a NetAddr(127.0.0.1, 57110), nil, nil), IdentitySet[an OSCMessageDispatcher]]
 
+
+// cable func
+x = Syn(\default, [
+	freq: Cable({ LFDNoise3.kr(8).exprange(200, 800) })
+]);
+y = x.play;
+
+y.release;
+
+
+// shared cable
+(
+var cable;
+x = Syn(\default, [
+	freq: Cable({ LFDNoise3.kr(8).exprange(200, 800) }),
+	pan: cable = Cable.shared({ SinOsc.kr(SinOsc.kr(0.2).exprange(0.5, 4)) }),
+	amp: cable
+]);
+y = x.play;
+)
+
+y.node.trace
+
+y.release;
+
+s.sendMsg(\n_trace, 1012);
