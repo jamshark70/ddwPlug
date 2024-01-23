@@ -1,5 +1,7 @@
 /* gplv3 hjh */
 
+// TODO: Is it safe to 'release' always?
+
 /*
 Intended flow:
 - Syn is the driver.
@@ -58,7 +60,7 @@ Another class? Or 'copy' the cable and set a flag?
 
 Cable {
 	var <source, <args, <rate, <numChannels;
-	var <node;
+	var <node, <dest;
 	var <bus;  // use AutoReleaseBus
 	// var nodes;
 	var isConcrete = false;
@@ -88,17 +90,20 @@ Cable {
 			bus.removeClient(this);
 			bus = node = nil;
 		};
+		this.changed(\didFree, \cableFreed);
 		// nodes.do { |node| node.removeDependant(this) };
 	}
 
-	asPluggable { |dest, bundle, controlDict|
+	asPluggable { |argDest, bundle, controlDict|
 		if(isConcrete) {
+			dest = argDest;
 			if(bus.isNil) {
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 
 				// preparation messages, bundle messages
-				node = source.preparePlugBundle(
-					dest,
+				node = source.preparePlugSource(this, bundle);
+				node.defName.preparePlugBundle(
+					this,
 					bundle,
 					args.asOSCPlugArray(dest, bundle, controlDict)
 					++ [out: bus, i_out: bus],
@@ -116,9 +121,12 @@ Cable {
 			dest.addDependant(bus);
 			^this.asMap
 		} {
-			^this.concreteInstance.asPluggable(dest, bundle, controlDict)
+			^this.concreteInstance.asPluggable(argDest, bundle, controlDict)
 		}
 	}
+
+	server { ^dest.server }
+	group { ^dest.group }
 
 	asMap {
 		var rateLetter = bus.rate.asString.first;
@@ -158,18 +166,18 @@ Cable {
 // only non-cable controls
 
 Syn {
-	var <>defName, <>args, <>target, <>addAction;
+	var <>source, <>args, <>target, <>addAction;
 
 	// unlike Synth, does *not* send
 	// you need to 'play' it
 	// this way, one template can play multiple complexes
-	*new { |defName, args, target(Server.default.defaultGroup), addAction = \addToHead|
-		^super.newCopyArgs(defName, args, target, addAction)
+	*new { |source, args, target(Server.default.defaultGroup), addAction = \addToHead|
+		^super.newCopyArgs(source, args, target, addAction)
 	}
 
 	play { |argTarget, argAddAction, argArgs, latency|
 		^SynPlayer(
-			defName,
+			source,
 			argArgs ?? { args },  // merge?
 			argTarget ?? { target },
 			argAddAction ?? { addAction },
@@ -181,12 +189,12 @@ Syn {
 SynPlayer /*: Synth*/ {
 	// NOPE defName, group, isPlaying, isRunning, nodeID, server
 
-	var <>defName, <>args, <>target, <>addAction;
+	var <>source, <>args, <>target, <>addAction;
 	var <node, <group, watcher;
 	var <controls;  // flat dictionary of ctl paths --> node arrays
 
-	*new { |defName, args, target, addAction, latency|
-		^super.newCopyArgs(defName, args, target, addAction).init(latency);
+	*new { |source, args, target, addAction, latency|
+		^super.newCopyArgs(source, args, target, addAction).init(latency);
 	}
 
 	init { |latency|
@@ -196,13 +204,19 @@ SynPlayer /*: Synth*/ {
 		group = Group.basicNew(target.server);  // note, children can get this from 'dest'
 		bundle.add(group.newMsg(target, addAction));
 
-		// this should exist before asOSCPlugArray
-		node = Synth.basicNew(defName, target.server);
+		// node = Synth.basicNew(defName, target.server);
+		// bundle.add(node.newMsg(group, argList, \addToTail));
+		// question for later: this is now basically just like Cable
+		// so do we even need a top-level object?
+		node = source.preparePlugSource(this, bundle);
 
 		controls = IdentityDictionary.new;
 		argList = args.asOSCPlugArray(this, bundle, controls);
 
-		bundle.add(node.newMsg(group, argList, \addToTail));
+		// maybe need to refactor this
+		// all types of sources should flatten to a 'defName'?
+		node.defName.preparePlugBundle(this, bundle, argList, controls);
+
 		bundle.sendOnTime(target.server, latency ?? { target.server.latency });
 
 		watcher = OSCFunc({
@@ -211,10 +225,11 @@ SynPlayer /*: Synth*/ {
 	}
 
 	server { ^target.server }
+	dest { ^this }
 
 	free { |... why|
 		group.free;
-		watcher.free;
+		// watcher.free;
 		this.didFree(*why);
 	}
 

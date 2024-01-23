@@ -20,7 +20,9 @@
 	asOSCPlugEmbeddedArray { |array, dest, bundle, controlDict|
 		^array.add(this.asPluggable(dest, bundle, controlDict))
 	}
-	asOSCPlugArray { |dest, bundle, controlDict| ^this.asPluggable(dest, bundle, controlDict) }
+	asOSCPlugArray { |dest, bundle, controlDict|
+		^this.asPluggable(dest, bundle, controlDict)
+	}
 	// asOSCPlugBundle { |dest| ^this.asPluggable(dest, controlDict) }
 
 }
@@ -59,35 +61,41 @@
 
 // sources
 + String {
+	preparePlugSource { |dest, bundle|
+		^Synth.basicNew(this, dest.server);
+	}
 	preparePlugBundle { |dest, bundle, args, controlDict|
-		var node = Synth.basicNew(this, dest.server);
-		bundle.add(node.newMsg(dest.group, args, \addToTail));
-		^node
+		bundle.add(dest.node.newMsg(dest.group, args, \addToTail));
+		^dest.node
 	}
 }
 
 + Symbol {
+	preparePlugSource { |dest, bundle|
+		^this.asString.preparePlugSource(dest, bundle);
+	}
 	preparePlugBundle { |dest, bundle, args, controlDict|
 		^this.asString.preparePlugBundle(dest, bundle, args, controlDict);
 	}
 }
 
 + Function {
-	preparePlugBundle { |dest, bundle, args, controlDict|
-		var def = this.asSynthDef/*(name: )*/;
+	preparePlugSource { |dest, bundle|
+		var def = this.asSynthDef(fadeTime: 0.1, /*name: */);
 		var node;
 		bundle.addPrepare([\d_recv, def.asBytes]);
-		def.allControlNames.do(_.postln);
-		node = Synth.basicNew(def.name, dest.server);
-		bundle.add(node.newMsg(
+		^Synth.basicNew(def.name, dest.server);
+	}
+	preparePlugBundle { |dest, bundle, args, controlDict|
+		bundle.add(dest.node.newMsg(
 			dest.group,
 			args,
 			\addToTail
 		));
 		OSCFunc({
 			dest.server.sendMsg(\d_free, def.name);
-		}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
+		}, '/n_end', dest.server.addr, argTemplate: [dest.node.nodeID])
 		.oneShot;
-		^node
+		^dest.node
 	}
 }

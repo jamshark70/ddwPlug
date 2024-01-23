@@ -120,3 +120,27 @@ y.node.trace
 y.release;
 
 s.sendMsg(\n_trace, 1012);
+
+
+// independent cables with ad-hoc Syn function
+// note: should override rate based on function
+// but we don't know the function's rate until resolving it
+(
+// note, not defined within the thing
+var freqCable = Cable({ LFDNoise3.kr(8).exprange(200, 800) });
+
+x = Syn(
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) * 0.05 },
+	[
+		in1: Cable(\default, [freq: freqCable], \audio, 2),
+		in2: Cable(\default, [freq: freqCable], \audio, 2)
+	]
+);
+y = x.play;
+)
+
+y.node.trace
+
+y.release;
+
+s.audioBusAllocator.debug
