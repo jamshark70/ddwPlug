@@ -63,7 +63,7 @@ Cable {
 	var <node, <dest;
 	var <bus;  // use AutoReleaseBus
 	// var nodes;
-	var isConcrete = false;
+	var <isConcrete = false;
 
 	// Cable also needs to be told the destination
 	// I think this is asPluggable?
@@ -95,18 +95,24 @@ Cable {
 	}
 
 	asPluggable { |argDest, bundle, controlDict|
+		var argList;
 		if(isConcrete) {
 			dest = argDest;
 			if(bus.isNil) {
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 
+				// only one synth per cable, for now
+				argList = [
+					args.asOSCPlugArray(dest, bundle, controlDict)
+					++ [out: bus, i_out: bus]
+				];
 				// preparation messages, bundle messages
-				node = source.preparePlugSource(this, bundle);
-				node.defName.preparePlugBundle(
+				node = source.preparePlugSource(this, bundle, argList)
+				.at(0);  // one synth for now
+				source.preparePlugBundle(
 					this,
 					bundle,
-					args.asOSCPlugArray(dest, bundle, controlDict)
-					++ [out: bus, i_out: bus],
+					argList,
 					controlDict
 				);
 			};
@@ -125,6 +131,7 @@ Cable {
 		}
 	}
 
+	nodeAt { |i| ^node }  // just the one
 	server { ^dest.server }
 	group { ^dest.group }
 
@@ -184,20 +191,29 @@ Syn {
 			latency ?? { target.server.latency }
 		)
 	}
+
+	eventPlay { |argTarget, argAddAction, argArgs, latency|
+		^SynPlayer(
+			source,
+			argArgs ?? { args },  // merge?
+			argTarget ?? { target },
+			argAddAction ?? { addAction },
+			latency ?? { target.server.latency },
+			\event
+		)
+	}
 }
 
-SynPlayer /*: Synth*/ {
-	// NOPE defName, group, isPlaying, isRunning, nodeID, server
-
+SynPlayer {
 	var <>source, <>args, <>target, <>addAction;
-	var <node, <group, watcher;
-	var <controls;  // flat dictionary of ctl paths --> node arrays
+	var <node, <group, watcher, nodeIDs;
+	var <controls;  // flat dictionary of ctl paths --> node-or-cable arrays
 
-	*new { |source, args, target, addAction, latency|
-		^super.newCopyArgs(source, args, target, addAction).init(latency);
+	*new { |source, args, target, addAction, latency, style(\synth)|
+		^super.newCopyArgs(source, args, target, addAction).init(latency, style);
 	}
 
-	init { |latency|
+	init { |latency, style|
 		var argList;
 		var bundle = OSCBundle.new;
 
@@ -208,24 +224,38 @@ SynPlayer /*: Synth*/ {
 		// bundle.add(node.newMsg(group, argList, \addToTail));
 		// question for later: this is now basically just like Cable
 		// so do we even need a top-level object?
-		node = source.preparePlugSource(this, bundle);
 
 		controls = IdentityDictionary.new;
-		argList = args.asOSCPlugArray(this, bundle, controls);
+
+		if(style == \event) {
+			argList = this.multiChannelExpand(args);
+		} {
+			argList = [args];
+		};
+		argList = argList.collect { |a| a.asOSCPlugArray(this, bundle, controls) };
 
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
-		node.defName.preparePlugBundle(this, bundle, argList, controls);
+		node = source.preparePlugSource(this, bundle, argList);
+		node[0].defName.preparePlugBundle(this, bundle, argList, controls);
 
 		bundle.sendOnTime(target.server, latency ?? { target.server.latency });
 
-		watcher = OSCFunc({
-			this.free(\nodeEnded);  // that simple?
-		}, '/n_end', target.server.addr, argTemplate: [node.nodeID]).oneShot;
+		nodeIDs = IdentitySet.new;
+		watcher = node.collect { |n|
+			nodeIDs.add(n.nodeID);
+			OSCFunc({ |msg|
+				nodeIDs.remove(msg[1]);
+				if(nodeIDs.isEmpty) {
+					this.free(\nodeEnded);  // that simple?
+				};
+			}, '/n_end', target.server.addr, argTemplate: [n.nodeID]).oneShot;
+		};
 	}
 
 	server { ^target.server }
 	dest { ^this }
+	nodeAt { |i| ^node[i] }
 
 	free { |... why|
 		group.free;
@@ -239,5 +269,23 @@ SynPlayer /*: Synth*/ {
 
 	didFree { |... why|
 		this.changed(\didFree, *why);
+	}
+
+	multiChannelExpand { |args|
+		// duplicate any non-shared cables, to preserve independence
+		^this.duplicateCables(args).flop
+	}
+
+	duplicateCables { |args|
+		^args.collect { |item|
+			case
+			{ item.isSequenceableCollection } {
+				this.duplicateCables(item)
+			}
+			{ item.isKindOf(Cable) } {
+				if(item.isConcrete) { item } { item.copy }
+			}
+			{ item }
+		}
 	}
 }

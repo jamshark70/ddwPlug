@@ -61,18 +61,20 @@
 
 // sources
 + String {
-	preparePlugSource { |dest, bundle|
-		^Synth.basicNew(this, dest.server);
+	preparePlugSource { |dest, bundle, argList|
+		^Array.fill(argList.size, { Synth.basicNew(this, dest.server) });
 	}
 	preparePlugBundle { |dest, bundle, args, controlDict|
-		bundle.add(dest.node.newMsg(dest.group, args, \addToTail));
+		args.do { |argList, i|
+			bundle.add(dest.nodeAt(i).newMsg(dest.group, argList, \addToTail));
+		};
 		^dest.node
 	}
 }
 
 + Symbol {
-	preparePlugSource { |dest, bundle|
-		^this.asString.preparePlugSource(dest, bundle);
+	preparePlugSource { |dest, bundle, argList|
+		^this.asString.preparePlugSource(dest, bundle, argList);
 	}
 	preparePlugBundle { |dest, bundle, args, controlDict|
 		^this.asString.preparePlugBundle(dest, bundle, args, controlDict);
@@ -80,22 +82,32 @@
 }
 
 + Function {
-	preparePlugSource { |dest, bundle|
-		var def = this.asSynthDef(fadeTime: 0.1, /*name: */);
+	preparePlugSource { |dest, bundle, argList|
+		var fadeTime = if(dest.rate == \audio, 0.1, nil);
+		var def = this.asSynthDef(fadeTime: fadeTime, /*name: */);
 		var node;
 		bundle.addPrepare([\d_recv, def.asBytes]);
-		^Synth.basicNew(def.name, dest.server);
+		^Array.fill(argList.size, { Synth.basicNew(def.name, dest.server) });
 	}
 	preparePlugBundle { |dest, bundle, args, controlDict|
-		bundle.add(dest.node.newMsg(
-			dest.group,
-			args,
-			\addToTail
-		));
-		OSCFunc({
-			dest.server.sendMsg(\d_free, def.name);
-		}, '/n_end', dest.server.addr, argTemplate: [dest.node.nodeID])
-		.oneShot;
+		var nodes = IdentitySet.new;
+		args.do { |argList, i|
+			nodes.add(dest.nodeAt(i).nodeID);
+			bundle.add(dest.nodeAt(i).newMsg(
+				dest.group,
+				argList,
+				\addToTail
+			));
+		};
+		dest.node.do { |node|
+			OSCFunc({ |msg|
+				nodes.remove(msg[1]);
+				if(nodes.isEmpty) {
+					dest.server.sendMsg(\d_free, node.defName);
+				};
+			}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
+			.oneShot;
+		};
 		^dest.node
 	}
 }

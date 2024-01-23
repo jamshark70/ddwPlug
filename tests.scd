@@ -6,6 +6,10 @@
 ~saveAddr = s.addr;
 
 s.addr = ~debugAddr;
+
+OSCFunc.trace(true, true);
+s.volume = -20;
+
 s.addr = ~saveAddr;
 
 o = OSCBundle.new;
@@ -59,7 +63,8 @@ x = Syn(\default, [
 		[rate: Cable(
 			\freqlfo, [rate: 0.7, low: 1, high: 70]
 		)]
-	)
+	),
+	amp: 0.05
 ]);
 
 y = x.play;
@@ -139,8 +144,23 @@ x = Syn(
 y = x.play;
 )
 
-y.node.trace
+y.nodeAt(0).trace
 
 y.release;
 
 s.audioBusAllocator.debug
+
+
+// multichannel expansion
+(
+x = Syn(\default, [
+	freq: (3..5).collect { |i|
+		Cable({ (1.1 ** LFDNoise3.kr(3)) * (200 * i) })
+	}
+].debug("arglist"));
+y = x.eventPlay;
+)
+
+s.sendMsg(\n_trace, 1001);
+
+y.release;
