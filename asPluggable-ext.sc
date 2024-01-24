@@ -1,15 +1,15 @@
 /* gplv3 hjh */
 
 + SequenceableCollection {
-	asOSCPlugArray { |dest, bundle, controlDict|
+	asOSCPlugArray { |dest, downstream, bundle, controlDict|
 		var array = Array(100);		// allocate a bunch of space
-		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, bundle, controlDict) };
+		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict) };
 		^array
 	}
 
-	asPlugEmbeddedArray { |array, dest, bundle, controlDict|
+	asPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
 		array = array.add($[);
-		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, bundle, controlDict) };
+		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict) };
 		^array.add($])
 	}
 }
@@ -17,11 +17,11 @@
 + Object {
 	asPluggable { ^this.asControlInput }
 
-	asOSCPlugEmbeddedArray { |array, dest, bundle, controlDict|
-		^array.add(this.asPluggable(dest, bundle, controlDict))
+	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
+		^array.add(this.asPluggable(dest, downstream, bundle, controlDict))
 	}
-	asOSCPlugArray { |dest, bundle, controlDict|
-		^this.asPluggable(dest, bundle, controlDict)
+	asOSCPlugArray { |dest, downstream, bundle, controlDict|
+		^this.asPluggable(dest, downstream, bundle, controlDict)
 	}
 	// asOSCPlugBundle { |dest| ^this.asPluggable(dest, controlDict) }
 
@@ -29,14 +29,14 @@
 
 // do we really want to do this?
 + Function {
-	asPluggable { |dest, bundle, controlDict|
+	asPluggable { |dest, downstream, bundle, controlDict|
 		Error("Functions not supported in Syn yet").throw;
 	}
 }
 
 // should not be polyphonic? NodeProxies don't auto-spawn
 + NodeProxy {
-	asPluggable { |dest, controlDict|
+	asPluggable { |dest, downstream, controlDict|
 	}
 }
 
@@ -64,9 +64,9 @@
 	preparePlugSource { |dest, bundle, argList|
 		^Array.fill(argList.size, { Synth.basicNew(this, dest.server) });
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict|
+	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
 		args.do { |argList, i|
-			bundle.add(dest.nodeAt(i).newMsg(dest.group, argList, \addToTail));
+			bundle.add(dest.nodeAt(i).newMsg(target /*dest.group*/, argList, action /*\addToTail*/));
 		};
 		^dest.node
 	}
@@ -76,8 +76,8 @@
 	preparePlugSource { |dest, bundle, argList|
 		^this.asString.preparePlugSource(dest, bundle, argList);
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict|
-		^this.asString.preparePlugBundle(dest, bundle, args, controlDict);
+	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
+		^this.asString.preparePlugBundle(dest, bundle, args, controlDict, target, action);
 	}
 }
 
@@ -89,14 +89,14 @@
 		bundle.addPrepare([\d_recv, def.asBytes]);
 		^Array.fill(argList.size, { Synth.basicNew(def.name, dest.server) });
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict|
+	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
 		var nodes = IdentitySet.new;
 		args.do { |argList, i|
 			nodes.add(dest.nodeAt(i).nodeID);
 			bundle.add(dest.nodeAt(i).newMsg(
-				dest.group,
+				target /*dest.group*/,
 				argList,
-				\addToTail
+				action /*\addToTail*/
 			));
 		};
 		dest.node.do { |node|
@@ -106,7 +106,7 @@
 					dest.server.sendMsg(\d_free, node.defName);
 				};
 			}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
-			.oneShot;
+			.fix.oneShot;
 		};
 		^dest.node
 	}

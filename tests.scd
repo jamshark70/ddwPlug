@@ -4,11 +4,17 @@
 
 ~debugAddr = DebugNetAddr("127.0.0.1", 57110);
 ~saveAddr = s.addr;
-
 s.addr = ~debugAddr;
-
 OSCFunc.trace(true, true);
 s.volume = -20;
+
+s.volume = 0;
+
+(
+SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
+	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
+}).add;
+)
 
 s.addr = ~saveAddr;
 
@@ -42,12 +48,6 @@ z.release;
 
 
 // simple cable
-(
-SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
-	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
-}).add;
-)
-
 x = Syn(\default, [freq: Cable(\freqlfo, [rate: 3])]);
 y = x.play;
 
@@ -57,6 +57,7 @@ s.controlBusAllocator.debug  // all freed, good!
 
 
 // nested cable
+(
 x = Syn(\default, [
 	freq: Cable(
 		\freqlfo,
@@ -68,6 +69,7 @@ x = Syn(\default, [
 ]);
 
 y = x.play;
+)
 
 y.release;
 
@@ -130,6 +132,9 @@ s.sendMsg(\n_trace, 1012);
 // independent cables with ad-hoc Syn function
 // note: should override rate based on function
 // but we don't know the function's rate until resolving it
+
+// btw Syn func isn't removed here
+
 (
 // note, not defined within the thing
 var freqCable = Cable({ LFDNoise3.kr(8).exprange(200, 800) });
@@ -164,3 +169,193 @@ y = x.eventPlay;
 s.sendMsg(\n_trace, 1001);
 
 y.release;
+
+// note: cannot do math ops on a Cable
+// maybe make it an AbstractFunction?
+(
+Event.addEventType(\syn, {|server|
+	var freqs, lag, strum, sustain;
+	var bndl, addAction, sendGate, ids;
+	var msgFunc, instrumentName, offset, strumOffset;
+
+	// var schedBundleArray;
+
+	freqs = ~freq /*~detunedFreq*/.value;
+
+	// msgFunc gets the synth's control values from the Event
+	msgFunc = ~getMsgFunc.valueEnvir;
+	instrumentName = ~synthDefName.valueEnvir;
+
+	// determine how to send those commands
+	// sendGate == false turns off releases
+
+	sendGate = ~sendGate ? ~hasGate;
+
+	// update values in the Event that may be determined by functions
+
+	~freq = freqs;
+	~amp = ~amp.value;
+	~sustain = sustain = ~sustain.value;
+	lag = ~lag;
+	offset = ~timingOffset;
+	strum = ~strum;
+	~server = server;
+	~latency = ~latency ?? { server.latency };  // seriously...?
+	~isPlaying = true;
+	addAction = Node.actionNumberFor(~addAction);
+
+	// compute the control values and generate OSC commands
+	bndl = msgFunc.valueEnvir;
+
+	// if(strum == 0 and: { (sendGate and: { sustain.isArray })
+	// or: { offset.isArray } or: { lag.isArray } }) {
+	// 	bndl = flopTogether(
+	// 		bndl,
+	// 		[sustain, lag, offset]
+	// 	);
+	// 	#sustain, lag, offset = bndl[1].flop;
+	// 	bndl = bndl[0];
+	// } {
+	// 	bndl = bndl.flop
+	// };
+
+	// produce a node id for each synth
+
+	// ~syn = Syn(instrumentName, bndl, ~group, ~addAction);
+	~group = ~group.value;
+	~group = Group.basicNew(~server, ~group);  // seriously...?
+	~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
+	bndl = ~syn.prepareToBundle(\event);
+	~syn.registerNodes;
+
+	// schedule when the bundles are sent
+
+	if (strum == 0) {
+		{
+			var start = thisThread.seconds;
+			bndl.doPrepare(server, inEnvir {
+				var latency;
+				latency = ~latency + start - thisThread.seconds;
+				~schedBundleArray.(lag, offset, server, bndl.messages, latency);
+			});
+		}.fork(SystemClock);
+		if (sendGate) {
+			~schedBundleArray.(
+				lag,
+				sustain + offset,
+				server,
+				[15 /* \n_set */, ~syn.node.collect(_.nodeID), \gate, 0].flop,
+				~latency
+			);
+		}
+	} {
+		// I think I can't support this?
+		// if (strum < 0) {
+		// 	bndl = bndl.reverse;
+		// 	ids = ids.reverse
+		// };
+		// this, I have no idea what to do with
+		strumOffset = offset + Array.series(bndl.size, 0, strum.abs);
+		~schedBundleArray.(
+			lag, strumOffset, server, bndl, ~latency
+		);
+		if (sendGate) {
+			if (~strumEndsTogether) {
+				strumOffset = sustain + offset
+			} {
+				strumOffset = sustain + strumOffset
+			};
+			~schedBundleArray.(
+				lag, strumOffset, server,
+				[15 /* \n_set */, ids, \gate, 0].flop,
+				~latency
+			);
+		}
+	}
+});
+)
+
+e = (type: \syn, instrument: \default, freq: Cable({ LFTri.kr(0.1).range(200, 800) }), sustain: 2).play;
+
+e[\syn].node
+e[\syn].free;
+
+e = (type: \syn, instrument: \default, freq: Cable({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
+
+Event.default[\latency]
+
+
+
+// order of exec
+// nested cable
+(
+x = Syn(\default, [
+	freq: Cable(
+		\freqlfo,
+		[rate: Cable(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+
+y = x.play;
+)
+
+y.release;
+
+s.controlBusAllocator.debug;
+
+y.antecedents
+y.antecedents.do { |c| c.dump }; ""
+
+~freqCable = y.antecedents.choose;  // only one
+~freqCable.antecedents.do { |c| c.dump }; ""
+
+~rateCable = ~freqCable.antecedents.choose;
+~rateCable.antecedents  // empty
+
+// ok weird thing on cmd-.
+o = OSCFunc({ |msg| msg.postln }, '/test').fix.oneShot;
+OSCFunc.allEnabled;
+
+NetAddr.localAddr.sendMsg('/test');
+
+
+
+// shared cable across Syns
+(
+var lfo = Cable.shared({ LFDNoise3.kr(2) });
+
+l = lfo;
+
+x = Syn(\default, [
+	freq: Cable({ |lfo| lfo.linexp(-1, 1, 200, 800) }, [lfo: lfo])
+], addAction: \addToTail).play;
+y = Syn(\default, [
+	freq: Cable({ |lfo| lfo.linexp(-1, 1, 1000, 3000) }, [lfo: lfo])
+], addAction: \addToTail).play;
+)
+
+l.descendants.do(_.dump);
+
+x.antecedents.do(_.dump);
+y.antecedents.do(_.dump);
+
+x.antecedents.choose.antecedents
+
+[l, x.antecedents.choose, y.antecedents.choose]
+
+l.dump
+
+// now stop one
+y.release;
+x.release;
+
+
+	changed { |... args|
+		args.debug("% changed".format(this));
+		this.dependants.debug;
+		^super.changed(*args)
+	}
+
