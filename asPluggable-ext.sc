@@ -3,11 +3,22 @@
 + SequenceableCollection {
 	asOSCPlugArray { |dest, downstream, bundle, controlDict|
 		var array = Array(100);		// allocate a bunch of space
-		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict) };
+		var savePath = controlDict.proto[\path];
+		var path = savePath ++ [""];
+		// path.debug("seqcoll:asOSCPlugArray");
+		this.do { |e|
+			if(e.isSymbol or: { e.isString }) {
+				path.putLast(e.asSymbol);
+			};
+			controlDict.proto[\path] = path;
+			// [e, path].debug("calling asOSCPlugEmbeddedArray");
+			array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict);
+		};
+		controlDict.proto[\path] = savePath;
 		^array
 	}
 
-	asPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
+	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
 		array = array.add($[);
 		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict) };
 		^array.add($])

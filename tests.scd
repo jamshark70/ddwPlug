@@ -375,3 +375,12 @@ d = SynthDesc.readFile(CollStream(b));
 d = d.choose;
 
 d.outputs.do(_.dump); ""
+
+
+[].join($/).asCompileString
+#[abc, def].join($/).asCompileString
+
+SynthDescLib.at(\default).controls
+
+
+y.controls.keysValuesDo { |k, v| [k, v].postln }; ""

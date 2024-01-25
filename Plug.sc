@@ -105,11 +105,11 @@ Cable {
 	asPluggable { |argDest, downstream, bundle, controlDict|
 		var argList;
 		if(isConcrete) {
+			// [argDest, downstream, bundle, controlDict.proto, controlDict].debug("Cable:asPluggable");
 			dest = argDest;
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
-
 				// only one synth per cable, for now
 				argList = [
 					args.asOSCPlugArray(dest, this, bundle, controlDict)
@@ -130,6 +130,7 @@ Cable {
 					controlDict,
 					*dest.bundleTarget
 				);
+				dest.lastCable = this;  // only set if this time made a node
 			};
 
 			// if(nodes.includes(dest).not) {
@@ -140,9 +141,7 @@ Cable {
 			bus.addClient(downstream);
 			downstream.addDependant(this);
 			downstream.addDependant(bus);
-			dest.lastCable = this;
 			^this.asMap;
-
 		} {
 			^this.concreteInstance.asPluggable(argDest, downstream, bundle, controlDict);
 		}
@@ -151,6 +150,13 @@ Cable {
 	nodeAt { |i| ^node }  // just the one
 	server { ^dest.server }
 	group { ^dest.group }
+
+	set { |... args|
+		node.set(*args);
+	}
+	setn { |... args|
+		node.setn(*args);
+	}
 
 	findOutputChannel { |bundle|
 		var desc, msg, io;
@@ -177,6 +183,13 @@ Cable {
 			if(io.notNil) {
 				rate = io.rate;
 				numChannels = io.numberOfChannels;
+			};
+
+			// also slightly cheating, but I have the def here, so...
+			// desc.debug("adding controls for desc");
+			// dest.controls.proto[\path].debug("path is currently");
+			desc.controls.do { |cn|
+				dest.addControl(this, cn.name);
 			};
 		};  // else don't touch the user's rate / numChannels
 	}
@@ -293,7 +306,9 @@ SynPlayer {
 		// question for later: this is now basically just like Cable
 		// so do we even need a top-level object?
 
-		controls = IdentityDictionary.new;
+		controls = IdentityDictionary.new.proto_(
+			IdentityDictionary[\path -> []]
+		);
 
 		if(#[event, eventgroup].includes(style)) {
 			argList = this.multiChannelExpand(args);
@@ -305,6 +320,7 @@ SynPlayer {
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
 		node = source.preparePlugSource(this, bundle, argList);
+		this.addControls(bundle);
 		source.preparePlugBundle(
 			this, bundle, argList, controls,
 			*this.bundleTarget
@@ -333,18 +349,92 @@ SynPlayer {
 		};
 	}
 
+	set { |... args|
+		args.pairsDo { |key, value|
+			var map = controls[key];
+			if(map.notNil) {
+				map.keysValuesDo { |ctlname, object|
+					if(object !== this) {
+						object.set(ctlname, value)
+					} {
+						node.do(_.set(ctlname, value))
+					}
+				}
+			} {
+				node.do(_.set(key, value))  // fallback, just try at the head
+			}
+		};
+	}
+
+	setn { |... args|
+		args.pairsDo { |key, value|
+			var map = controls[key];
+			if(map.notNil) {
+				map.keysValuesDo { |ctlname, object|
+					if(object !== this) {
+						object.setn(ctlname, value)
+					} {
+						node.do(_.setn(ctlname, value))
+					}
+				}
+			} {
+				node.do(_.setn(key, value))  // fallback, just try at the head
+			}
+		};
+	}
+
+	addControls { |bundle|
+		var desc, msg, io;
+		case
+		{ source.isSymbol or: { source.isString } } {
+			desc = SynthDescLib.at(source.asSymbol);
+		}
+		{ source.isFunction } {
+			msg = bundle.preparationMessages.last;
+			if(msg[0] == \d_recv) {
+				desc = SynthDesc.readFile(CollStream(msg[1])).choose;
+			}
+		};
+		if(desc.notNil) {
+			desc.controls.do { |cn|
+				this.addControl(this, cn.name);
+			};
+		};  // else don't touch the user's rate / numChannels
+	}
+
+	// name/subname --> a specific cable
+	// *name/subname --> that cable and all children
+	// name --> the SynPlayer
+	// *name --> everywhere
+	// maybe make these Sets?
+	addControl { |object, name|
+		var path = controls.proto[\path] ++ [name], key;
+		key = path.join($/).asSymbol;
+		// [object, name, path, key].debug("addControl");
+		// add single referent
+		if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
+		controls[key].put(name, object);
+		// all parent levels
+		path.size.do {
+			key = ("*" ++ path.join($/)).asSymbol;
+			if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
+			controls[key].put(name, object);
+			path = path.drop(-1);
+		};
+	}
+
 	server { ^target.server }
 	dest { ^this }
 	nodeAt { |i| ^node[i] }
 	bundleTarget {
-		^if(lastCable.isNil) {
-			[target, addAction]
+		^case
+		{ group.notNil } {
+			[group, \addToTail]
+		}
+		{ lastCable.notNil } {
+			[lastCable.node, \addAfter]
 		} {
-			if(group.notNil) {
-				[group, \addToTail]
-			} {
-				[lastCable.node, \addAfter]
-			}
+			[target, addAction]
 		}
 	}
 	rate { ^\audio }
