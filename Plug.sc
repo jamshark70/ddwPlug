@@ -109,16 +109,20 @@ Cable {
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
-				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 
 				// only one synth per cable, for now
 				argList = [
 					args.asOSCPlugArray(dest, this, bundle, controlDict)
-					++ [out: bus, i_out: bus]
 				];
 				// preparation messages, bundle messages
+				// preparePlugSource gives one node per argList entry
 				node = source.preparePlugSource(this, bundle, argList)
 				.at(0);  // one synth for now
+				// bundle is a sneaky way to extract a Function's def
+				// though probably inadequate for some future requirement
+				this.findOutputChannel(bundle);
+				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
+				argList[0] = argList[0] ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
 					this,
 					bundle,
@@ -147,6 +151,35 @@ Cable {
 	nodeAt { |i| ^node }  // just the one
 	server { ^dest.server }
 	group { ^dest.group }
+
+	findOutputChannel { |bundle|
+		var desc, msg, io;
+		case
+		{ source.isSymbol or: { source.isString } } {
+			desc = SynthDescLib.at(source.asSymbol);
+		}
+		{ source.isFunction } {
+			// oops, must communicate def back to here
+			// I'm gonna try something naughty though
+			// this is being called immediately after preparePlugSource
+			// so the latest prep message should be for this function
+			// and, only one of them -- '.choose' is a LOL
+			// but OK for a single-element unordered collection
+			msg = bundle.preparationMessages.last;
+			if(msg[0] == \d_recv) {
+				desc = SynthDesc.readFile(CollStream(msg[1])).choose;
+			}
+		};
+		if(desc.notNil) {
+			io = desc.outputs.detect { |io|
+				#[out, i_out].includes(io.startingChannel)
+			};
+			if(io.notNil) {
+				rate = io.rate;
+				numChannels = io.numberOfChannels;
+			};
+		};  // else don't touch the user's rate / numChannels
+	}
 
 	asMap {
 		var rateLetter = bus.rate.asString.first;

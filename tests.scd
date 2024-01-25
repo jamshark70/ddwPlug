@@ -133,17 +133,19 @@ s.sendMsg(\n_trace, 1012);
 // note: should override rate based on function
 // but we don't know the function's rate until resolving it
 
-// btw Syn func isn't removed here
+// note: Syn source function isn't analyzed for numChannels and rate
+// bc the SynPlayer's output is the user's responsibility
+// but in1 and in2 are
 
 (
 // note, not defined within the thing
 var freqCable = Cable({ LFDNoise3.kr(8).exprange(200, 800) });
 
 x = Syn(
-	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) * 0.05 },
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) /** 0.05*/ },
 	[
-		in1: Cable(\default, [freq: freqCable], \audio, 2),
-		in2: Cable(\default, [freq: freqCable], \audio, 2)
+		in1: Cable(\default, [freq: freqCable]/*, \audio, 2*/),
+		in2: Cable(\default, [freq: freqCable]/*, \audio, 2*/)
 	]
 );
 y = x.play;
@@ -359,3 +361,17 @@ x.release;
 		^super.changed(*args)
 	}
 
+
+
+// can we get numChannels from synthdef
+x = { SinOsc.ar(440) }.asSynthDef(fadeTime: 0.1);
+y = x.asSynthDesc;
+y.dump
+y.outputs
+y.outputs[0].dump
+
+b = x.asBytes;
+d = SynthDesc.readFile(CollStream(b));
+d = d.choose;
+
+d.outputs.do(_.dump); ""
