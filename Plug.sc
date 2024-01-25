@@ -28,6 +28,7 @@ AutoReleaseBus : Bus {
 	}
 
 	removeClient { |client|
+		clients.remove(client);
 		if(clients.notNil and: { clients.isEmpty }) {
 			this.free(\clientRemoved, client);
 		}
@@ -132,9 +133,9 @@ Cable {
 			// };
 			// these are all Sets so multiple adds are OK (no redundancy)
 			bus.addClient(this);
-			bus.addClient(dest);
-			dest.addDependant(this);
-			dest.addDependant(bus);
+			bus.addClient(downstream);
+			downstream.addDependant(this);
+			downstream.addDependant(bus);
 			dest.lastCable = this;
 			^this.asMap;
 
@@ -225,7 +226,6 @@ Syn {
 
 SynPlayer {
 	var <>source, <>args, <>target, <>addAction;
-	// eventually drop 'group'
 	var <node, <group, watcher, nodeIDs;
 	var <antecedents;
 	var <>lastCable;
@@ -250,8 +250,10 @@ SynPlayer {
 
 		if(antecedents.isNil) { antecedents = IdentitySet.new };
 
-		// group = Group.basicNew(target.server);  // note, children can get this from 'dest'
-		// bundle.add(group.newMsg(target, addAction));
+		if(#[synthgroup, eventgroup].includes(style)) {
+			group = Group.basicNew(target.server);  // note, children can get this from 'dest'
+			bundle.add(group.newMsg(target, addAction));
+		};
 
 		// node = Synth.basicNew(defName, target.server);
 		// bundle.add(node.newMsg(group, argList, \addToTail));
@@ -260,7 +262,7 @@ SynPlayer {
 
 		controls = IdentityDictionary.new;
 
-		if(style == \event) {
+		if(#[event, eventgroup].includes(style)) {
 			argList = this.multiChannelExpand(args);
 		} {
 			argList = [args];
@@ -305,7 +307,11 @@ SynPlayer {
 		^if(lastCable.isNil) {
 			[target, addAction]
 		} {
-			[lastCable.node, \addAfter]
+			if(group.notNil) {
+				[group, \addToTail]
+			} {
+				[lastCable.node, \addAfter]
+			}
 		}
 	}
 	rate { ^\audio }
