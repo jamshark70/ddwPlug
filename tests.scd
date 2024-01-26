@@ -48,7 +48,7 @@ z.release;
 
 
 // simple cable
-x = Syn(\default, [freq: Cable(\freqlfo, [rate: 3])]);
+x = Syn(\default, [freq: Plug(\freqlfo, [rate: 3])]);
 y = x.play;
 
 y.release;
@@ -59,9 +59,9 @@ s.controlBusAllocator.debug  // all freed, good!
 // nested cable
 (
 x = Syn(\default, [
-	freq: Cable(
+	freq: Plug(
 		\freqlfo,
-		[rate: Cable(
+		[rate: Plug(
 			\freqlfo, [rate: 0.7, low: 1, high: 70]
 		)]
 	),
@@ -91,7 +91,7 @@ Object.dependantsDictionary.keysValuesDo { |key, value| [key, value].postln }; "
 [localhost, IdentitySet[a SimpleController]]
 [OSCFunc(/status.reply, a NetAddr(127.0.0.1, 57110), nil, nil), IdentitySet[an OSCMessageDispatcher]]
 ** [OSCFunc(/n_end, a DebugNetAddr(127.0.0.1, 57110), nil, [1001]), IdentitySet[an OSCMessageDispatcher]]
-** [a SynPlayer, IdentitySet[AutoReleaseBus(control, 0, 1, localhost), a Cable, a Cable, AutoReleaseBus(control, 1, 1, localhost)]]
+** [a SynPlayer, IdentitySet[AutoReleaseBus(control, 0, 1, localhost), a Plug, a Plug, AutoReleaseBus(control, 1, 1, localhost)]]
 
 // after -- back to original state, good
 [class ProxyChain, IdentitySet[a Function]]
@@ -104,7 +104,7 @@ Object.dependantsDictionary.keysValuesDo { |key, value| [key, value].postln }; "
 
 // cable func
 x = Syn(\default, [
-	freq: Cable({ LFDNoise3.kr(8).exprange(200, 800) })
+	freq: Plug({ LFDNoise3.kr(8).exprange(200, 800) })
 ]);
 y = x.play;
 
@@ -115,8 +115,8 @@ y.release;
 (
 var cable;
 x = Syn(\default, [
-	freq: Cable({ LFDNoise3.kr(8).exprange(200, 800) }),
-	pan: cable = Cable.shared({ SinOsc.kr(SinOsc.kr(0.2).exprange(0.5, 4)) }),
+	freq: Plug({ LFDNoise3.kr(8).exprange(200, 800) }),
+	pan: cable = Plug.shared({ SinOsc.kr(SinOsc.kr(0.2).exprange(0.5, 4)) }),
 	amp: cable
 ]);
 y = x.play;
@@ -139,13 +139,13 @@ s.sendMsg(\n_trace, 1012);
 
 (
 // note, not defined within the thing
-var freqCable = Cable({ LFDNoise3.kr(8).exprange(200, 800) });
+var freqPlug = Plug({ LFDNoise3.kr(8).exprange(200, 800) });
 
 x = Syn(
 	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) /** 0.05*/ },
 	[
-		in1: Cable(\default, [freq: freqCable]/*, \audio, 2*/),
-		in2: Cable(\default, [freq: freqCable]/*, \audio, 2*/)
+		in1: Plug(\default, [freq: freqPlug]/*, \audio, 2*/),
+		in2: Plug(\default, [freq: freqPlug]/*, \audio, 2*/)
 	]
 );
 y = x.play;
@@ -162,7 +162,7 @@ s.audioBusAllocator.debug
 (
 x = Syn(\default, [
 	freq: (3..5).collect { |i|
-		Cable({ (1.1 ** LFDNoise3.kr(3)) * (200 * i) })
+		Plug({ (1.1 ** LFDNoise3.kr(3)) * (200 * i) })
 	}
 ].debug("arglist"));
 y = x.eventPlay;
@@ -172,7 +172,7 @@ s.sendMsg(\n_trace, 1001);
 
 y.release;
 
-// note: cannot do math ops on a Cable
+// note: cannot do math ops on a Plug
 // maybe make it an AbstractFunction?
 (
 Event.addEventType(\syn, {|server|
@@ -277,12 +277,12 @@ Event.addEventType(\syn, {|server|
 });
 )
 
-e = (type: \syn, instrument: \default, freq: Cable({ LFTri.kr(0.1).range(200, 800) }), sustain: 2).play;
+e = (type: \syn, instrument: \default, freq: Plug({ LFTri.kr(0.1).range(200, 800) }), sustain: 2).play;
 
 e[\syn].node
 e[\syn].free;
 
-e = (type: \syn, instrument: \default, freq: Cable({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
+e = (type: \syn, instrument: \default, freq: Plug({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
 
 Event.default[\latency]
 
@@ -292,9 +292,9 @@ Event.default[\latency]
 // nested cable
 (
 x = Syn(\default, [
-	freq: Cable(
+	freq: Plug(
 		\freqlfo,
-		[rate: Cable(
+		[rate: Plug(
 			\freqlfo, [rate: 0.7, low: 1, high: 70]
 		)]
 	),
@@ -306,16 +306,18 @@ y = x.play;
 
 y.release;
 
+y.allNodes
+
 s.controlBusAllocator.debug;
 
 y.antecedents
 y.antecedents.do { |c| c.dump }; ""
 
-~freqCable = y.antecedents.choose;  // only one
-~freqCable.antecedents.do { |c| c.dump }; ""
+~freqPlug = y.antecedents.choose;  // only one
+~freqPlug.antecedents.do { |c| c.dump }; ""
 
-~rateCable = ~freqCable.antecedents.choose;
-~rateCable.antecedents  // empty
+~ratePlug = ~freqPlug.antecedents.choose;
+~ratePlug.antecedents  // empty
 
 // ok weird thing on cmd-.
 o = OSCFunc({ |msg| msg.postln }, '/test').fix.oneShot;
@@ -327,15 +329,15 @@ NetAddr.localAddr.sendMsg('/test');
 
 // shared cable across Syns
 (
-var lfo = Cable.shared({ LFDNoise3.kr(2) });
+var lfo = Plug.shared({ LFDNoise3.kr(2) });
 
 l = lfo;
 
 x = Syn(\default, [
-	freq: Cable({ |lfo| lfo.linexp(-1, 1, 200, 800) }, [lfo: lfo])
+	freq: Plug({ |lfo| lfo.linexp(-1, 1, 200, 800) }, [lfo: lfo])
 ], addAction: \addToTail).play;
 y = Syn(\default, [
-	freq: Cable({ |lfo| lfo.linexp(-1, 1, 1000, 3000) }, [lfo: lfo])
+	freq: Plug({ |lfo| lfo.linexp(-1, 1, 1000, 3000) }, [lfo: lfo])
 ], addAction: \addToTail).play;
 )
 
@@ -384,3 +386,36 @@ SynthDescLib.at(\default).controls
 
 
 y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+
+
+// move
+
+g = Group.basicNew(s, 500);
+h = Group.basicNew(s, 501);
+
+s.sendBundle(nil, g.newMsg, h.newMsg);
+
+(
+x = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+
+y = x.play;
+)
+
+y.moveAfter(h);  // 501 1001 1002 1003 500 ok!
+y.moveToTail(s.defaultGroup);  // ok!
+
+y.moveBefore(g);
+y.moveToHead(h);
+
+y.release;
+
+// allNodes should test shared

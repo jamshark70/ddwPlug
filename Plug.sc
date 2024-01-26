@@ -7,10 +7,10 @@ Intended flow:
 - Syn is the driver.
 - When a Syn releases (n_end), it broadcasts didFree.
 - Dependants should include:
-- All Cable subclasses.
-- The AutoReleaseBus? (Yes. Cables may in theory end early.)
-Cable:asPluggable takes care of this.
-- So the \didFree notification should force-kill all the Cables,
+- All Plug subclasses.
+- The AutoReleaseBus? (Yes. Plugs may in theory end early.)
+Plug:asPluggable takes care of this.
+- So the \didFree notification should force-kill all the Plugs,
 and remove itself from the AutoReleaseBus, at which point, the bus goes away too.
 */
 
@@ -50,15 +50,15 @@ AutoReleaseBus : Bus {
 p = Pbind(
 \type, \syn,
 \instrument, \xyz,
-\lfo, Cable { LFDNoise3.kr(0.1) }
+\lfo, Plug { LFDNoise3.kr(0.1) }
 )
 
-You have one instance of Cable but you need one for each event.
-So Cable will have to manufacture an instance of something.
-Another class? Or 'copy' the cable and set a flag?
+You have one instance of Plug but you need one for each event.
+So Plug will have to manufacture an instance of something.
+Another class? Or 'copy' the Plug and set a flag?
 */
 
-Cable {
+Plug {
 	var <source, <args, <rate, <numChannels;
 	var <node, <dest;
 	var <bus;  // use AutoReleaseBus
@@ -66,7 +66,7 @@ Cable {
 	var <antecedents, <descendants;
 	var <isConcrete = false;
 
-	// Cable also needs to be told the destination
+	// Plug also needs to be told the destination
 	// I think this is asPluggable?
 
 	*new { |source, args, rate = \control, numChannels = 1|
@@ -96,21 +96,21 @@ Cable {
 		// dest is only the latest descendant
 		// dest.removeDependant(this);
 		descendants.do(_.removeDependant(this));  // not sure this is needed?
-		this.changed(\didFree, \cableFreed);
-		antecedents.do { |cable| cable.descendants.remove(this) };
-		descendants.do { |cable| cable.antecedents.remove(this) };
+		this.changed(\didFree, \plugFreed);
+		antecedents.do { |plug| plug.descendants.remove(this) };
+		descendants.do { |plug| plug.antecedents.remove(this) };
 		// nodes.do { |node| node.removeDependant(this) };
 	}
 
 	asPluggable { |argDest, downstream, bundle, controlDict|
 		var argList;
 		if(isConcrete) {
-			// [argDest, downstream, bundle, controlDict.proto, controlDict].debug("Cable:asPluggable");
+			// [argDest, downstream, bundle, controlDict.proto, controlDict].debug("Plug:asPluggable");
 			dest = argDest;
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
-				// only one synth per cable, for now
+				// only one synth per plug, for now
 				argList = [
 					args.asOSCPlugArray(dest, this, bundle, controlDict)
 				];
@@ -130,7 +130,7 @@ Cable {
 					controlDict,
 					*dest.bundleTarget
 				);
-				dest.lastCable = this;  // only set if this time made a node
+				dest.lastPlug = this;  // only set if this time made a node
 			};
 
 			// if(nodes.includes(dest).not) {
@@ -236,7 +236,7 @@ Cable {
 // in that case we need to pass the bundle down through the asOSCPlugArray chain
 
 // also need to keep a dictionary of settable controls
-// only non-cable controls
+// only non-plug controls
 
 Syn {
 	var <>source, <>args, <>target, <>addAction;
@@ -274,8 +274,8 @@ SynPlayer {
 	var <>source, <>args, <>target, <>addAction;
 	var <node, <group, watcher, nodeIDs;
 	var <antecedents;
-	var <>lastCable;
-	var <controls;  // flat dictionary of ctl paths --> node-or-cable arrays
+	var <>lastPlug;
+	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 
 	*new { |source, args, target, addAction, latency, style(\synth)|
 		^super.newCopyArgs(source, args, target, addAction).init(latency, style);
@@ -303,7 +303,7 @@ SynPlayer {
 
 		// node = Synth.basicNew(defName, target.server);
 		// bundle.add(node.newMsg(group, argList, \addToTail));
-		// question for later: this is now basically just like Cable
+		// question for later: this is now basically just like Plug
 		// so do we even need a top-level object?
 
 		controls = IdentityDictionary.new.proto_(
@@ -402,8 +402,8 @@ SynPlayer {
 		};  // else don't touch the user's rate / numChannels
 	}
 
-	// name/subname --> a specific cable
-	// *name/subname --> that cable and all children
+	// name/subname --> a specific plug
+	// *name/subname --> that plug and all children
 	// name --> the SynPlayer
 	// *name --> everywhere
 	// maybe make these Sets?
@@ -431,8 +431,8 @@ SynPlayer {
 		{ group.notNil } {
 			[group, \addToTail]
 		}
-		{ lastCable.notNil } {
-			[lastCable.node, \addAfter]
+		{ lastPlug.notNil } {
+			[lastPlug.node, \addAfter]
 		} {
 			[target, addAction]
 		}
@@ -440,7 +440,10 @@ SynPlayer {
 	rate { ^\audio }
 
 	free { |... why|
-		// watcher.free;
+		var bundle = Array(node.size + 2).add([error: -1]);
+		node.do { |n| bundle.add(n.freeMsg) };
+		bundle.add([error: -2]);
+		this.server.sendBundle(nil, *bundle);
 		this.didFree(*why);
 	}
 
@@ -454,17 +457,17 @@ SynPlayer {
 	}
 
 	multiChannelExpand { |args|
-		// duplicate any non-shared cables, to preserve independence
-		^this.duplicateCables(args).flop
+		// duplicate any non-shared plugs, to preserve independence
+		^this.duplicatePlugs(args).flop
 	}
 
-	duplicateCables { |args|
+	duplicatePlugs { |args|
 		^args.collect { |item|
 			case
 			{ item.isSequenceableCollection } {
-				this.duplicateCables(item)
+				this.duplicatePlugs(item)
 			}
-			{ item.isKindOf(Cable) } {
+			{ item.isKindOf(Plug) } {
 				if(item.isConcrete) { item } { item.copy }
 			}
 			{ item }
