@@ -383,6 +383,67 @@ SynPlayer {
 		};
 	}
 
+	moveToHead { |group|
+		var prev;
+		this.allNodes.do { |n|
+			if(prev.isNil) {
+				n.moveToHead(group);
+			} {
+				n.moveAfter(prev);
+			};
+			prev = n;
+		};
+	}
+	moveToTail { |group|
+		var prev;
+		this.allNodes.do { |n|
+			if(prev.isNil) {
+				n.moveToTail(group);
+			} {
+				n.moveAfter(prev);
+			};
+			prev = n;
+		};
+	}
+	moveBefore { |aNode|
+		var prev;
+		this.allNodes.do { |n|
+			if(prev.isNil) {
+				n.moveBefore(aNode);
+			} {
+				n.moveAfter(prev);
+			};
+			prev = n;
+		};
+	}
+	moveAfter { |aNode|
+		var prev;
+		this.allNodes.do { |n|
+			if(prev.isNil) {
+				n.moveAfter(aNode);
+			} {
+				n.moveAfter(prev);
+			};
+			prev = n;
+		};
+	}
+	allNodes {
+		var nodes = LinkedList.new;
+		var added = IdentitySet.new;
+		var traverse = { |set|
+			set.do { |plug|
+				traverse.(plug.antecedents);
+				if(added.includes(plug.node).not) {
+					nodes.add(plug.node);
+					added.add(plug.node);
+				};
+			};
+		};
+		traverse.(antecedents);
+		node.do { |n| nodes.add(n) };
+		^nodes
+	}
+
 	addControls { |bundle|
 		var desc, msg, io;
 		case
