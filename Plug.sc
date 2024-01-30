@@ -353,11 +353,13 @@ SynPlayer {
 		args.pairsDo { |key, value|
 			var map = controls[key];
 			if(map.notNil) {
-				map.keysValuesDo { |ctlname, object|
-					if(object !== this) {
-						object.set(ctlname, value)
-					} {
-						node.do(_.set(ctlname, value))
+				map.keysValuesDo { |ctlname, set|
+					set.do { |object|
+						if(object !== this) {
+							object.set(ctlname, value)
+						} {
+							node.do(_.set(ctlname, value))
+						}
 					}
 				}
 			} {
@@ -370,11 +372,13 @@ SynPlayer {
 		args.pairsDo { |key, value|
 			var map = controls[key];
 			if(map.notNil) {
-				map.keysValuesDo { |ctlname, object|
-					if(object !== this) {
-						object.setn(ctlname, value)
-					} {
-						node.do(_.setn(ctlname, value))
+				map.keysValuesDo { |ctlname, set|
+					set.do { |object|
+						if(object !== this) {
+							object.setn(ctlname, value)
+						} {
+							node.do(_.setn(ctlname, value))
+						}
 					}
 				}
 			} {
@@ -470,17 +474,22 @@ SynPlayer {
 	// maybe make these Sets?
 	addControl { |object, name|
 		var path = controls.proto[\path] ++ [name], key;
+		var addTo = { |dict, name, object|
+			if(dict[name].isNil) {
+				dict[name] = IdentitySet.new;
+			};
+			dict[name].add(object);
+		};
 		key = path.join($/).asSymbol;
-		// [object, name, path, key].debug("addControl");
 		// add single referent
 		if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
-		controls[key].put(name, object);
+		addTo.(controls[key], name, object);
 		// all parent levels
 		path.size.do {
 			key = ("*" ++ path.join($/)).asSymbol;
 			if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
-			controls[key].put(name, object);
-			path = path.drop(-1);
+			addTo.(controls[key], name, object);
+			if(path.size > 1) { path.removeAt(path.size - 2) };
 		};
 	}
 
