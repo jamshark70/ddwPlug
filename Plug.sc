@@ -83,9 +83,9 @@ Plug {
 		descendants = IdentitySet.new;
 	}
 
-	free {
+	free { |latency|
 		if(node.notNil) {
-			node.server.sendBundle(nil,
+			node.server.sendBundle(latency,
 				[\error, -1],
 				node.freeMsg,
 				[\error, -2]
@@ -341,7 +341,7 @@ SynPlayer {
 			OSCFunc({ |msg|
 				nodeIDs.remove(msg[1]);
 				if(nodeIDs.isEmpty) {
-					this.free(\nodeEnded);  // that simple?
+					this.free(nil, \nodeEnded);  // that simple?
 				};
 			}, '/n_end', target.server.addr, argTemplate: [n.nodeID])
 			// needs to survive cmd-.
@@ -509,17 +509,17 @@ SynPlayer {
 	}
 	rate { ^\audio }
 
-	free { |... why|
+	free { |latency ... why|
 		var bundle = Array(node.size + 2).add([error: -1]);
 		node.do { |n| bundle.add(n.freeMsg) };
 		bundle.add([error: -2]);
-		this.server.sendBundle(nil, *bundle);
+		this.server.sendBundle(latency, *bundle);
 		this.didFree(*why);
 	}
 
-	release {
-		// group.set(\gate, 0);  // let the watcher handle the rest
-		node.do(_.release);
+	release { |latency, gate = 0|
+		var bundle = [15, node.collect(_.nodeID), \gate, gate].flop;
+		this.server.sendBundle(latency, *bundle);
 	}
 
 	didFree { |... why|
