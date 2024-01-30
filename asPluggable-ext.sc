@@ -98,6 +98,7 @@
 		var def = this.asSynthDef(fadeTime: fadeTime, /*name: */);
 		var node;
 		bundle.addPrepare([\d_recv, def.asBytes]);
+		SynthDefTracker.register(dest, def.name);
 		^Array.fill(argList.size, { Synth.basicNew(def.name, dest.server) });
 	}
 	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
@@ -114,7 +115,7 @@
 			OSCFunc({ |msg|
 				nodes.remove(msg[1]);
 				if(nodes.isEmpty) {
-					dest.server.sendMsg(\d_free, node.defName);
+					SynthDefTracker.release(dest, node.defName);
 				};
 			}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
 			.fix.oneShot;

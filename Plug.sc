@@ -201,7 +201,11 @@ Plug {
 	}
 
 	asMap {
-		var rateLetter = bus.rate.asString.first;
+		var rateLetter;
+		if(bus.isNil) {
+			^nil;
+		};
+		rateLetter = bus.rate.asString.first;
 		^if(bus.numChannels > 1) {
 			Array.fill(bus.numChannels, { |i|
 				(rateLetter ++ (bus.index + i)).asSymbol
@@ -210,6 +214,7 @@ Plug {
 			bus.asMap
 		}
 	}
+	asControlInput { ^this.asMap }
 
 	concreteInstance {
 		^this.class.new(source, args, rate, numChannels).prConcrete_(true)
@@ -360,6 +365,7 @@ SynPlayer {
 		selector = (selector.asString ++ "Msg").asSymbol;
 		args.pairsDo { |key, value|
 			var map = controls[key];
+			value = value.asControlInput;
 			if(map.notNil) {
 				map.keysValuesDo { |ctlname, set|
 					set.do { |object|
@@ -708,5 +714,38 @@ SynPlayer {
 			// });
 			// monoSyn?
 		}
+	}
+}
+
+// need to track client SynPlayers and Plugs using an auto-generated synthdef
+SynthDefTracker {
+	// Dict: server -> defname (symbol) -> Set of clients
+	classvar all;
+
+	*initClass {
+		all = IdentityDictionary.new;
+	}
+
+	*register { |object, defname|
+		var server = object.server;
+		if(all[server].isNil) {
+			all[server] = IdentityDictionary.new;
+		};
+		defname = defname.asSymbol;
+		if(all[server][defname].isNil) {
+			all[server][defname] = IdentitySet.new;
+		};
+		all[server][defname].add(object);
+	}
+
+	*release { |object, defname|
+		var set = all[object.server];
+		if(set.notNil) {
+			set = set[defname];
+			set.remove(object);
+			if(set.isEmpty) {
+				object.server.sendMsg(\d_free, defname);
+			};
+		};
 	}
 }
