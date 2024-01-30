@@ -75,6 +75,8 @@ y.release;
 
 Object.dependantsDictionary.keysValuesDo { |key, value| [key, value].postln }; ""
 
+y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
 // init
 [class ProxyChain, IdentitySet[a Function]]
 [class Server, IdentitySet[class MixerChannel]]
@@ -177,8 +179,8 @@ y.release;
 (
 Event.addEventType(\syn, {|server|
 	var freqs, lag, strum, sustain;
-	var bndl, addAction, sendGate, ids;
-	var msgFunc, instrumentName, offset, strumOffset;
+	var bndl, addAction, sendGate, ids, i;
+	var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
 
 	// var schedBundleArray;
 
@@ -209,23 +211,9 @@ Event.addEventType(\syn, {|server|
 	// compute the control values and generate OSC commands
 	bndl = msgFunc.valueEnvir;
 
-	// if(strum == 0 and: { (sendGate and: { sustain.isArray })
-	// or: { offset.isArray } or: { lag.isArray } }) {
-	// 	bndl = flopTogether(
-	// 		bndl,
-	// 		[sustain, lag, offset]
-	// 	);
-	// 	#sustain, lag, offset = bndl[1].flop;
-	// 	bndl = bndl[0];
-	// } {
-	// 	bndl = bndl.flop
-	// };
-
-	// produce a node id for each synth
-
-	// ~syn = Syn(instrumentName, bndl, ~group, ~addAction);
 	~group = ~group.value;
-	~group = Group.basicNew(~server, ~group);  // seriously...?
+	// why? because ~group is (by default) the defaultGroup's ID, not the object
+	~group = Group.basicNew(~server, ~group);
 	~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
 	bndl = ~syn.prepareToBundle(\event);
 	~syn.registerNodes;
@@ -251,24 +239,33 @@ Event.addEventType(\syn, {|server|
 			);
 		}
 	} {
+		ids = ~syn.node.collect(_.nodeID);
 		// I think I can't support this?
 		// if (strum < 0) {
 		// 	bndl = bndl.reverse;
 		// 	ids = ids.reverse
 		// };
-		// this, I have no idea what to do with
-		strumOffset = offset + Array.series(bndl.size, 0, strum.abs);
-		~schedBundleArray.(
-			lag, strumOffset, server, bndl, ~latency
-		);
+		strumOffset = Array.series(~syn.node.size, offset, strum.abs);
+		i = bndl.messages.size - ~syn.node.size;
+		{
+			var start = thisThread.seconds;
+			bndl.doPrepare(server, inEnvir {
+				var latency;
+				latency = ~latency + start - thisThread.seconds;
+				~schedBundleArray.(lag,
+					Array.fill(i, offset) ++ strumOffset,
+					server, bndl.messages, latency
+				);
+			});
+		}.fork(SystemClock);
 		if (sendGate) {
 			if (~strumEndsTogether) {
-				strumOffset = sustain + offset
+				releaseOffset = sustain + offset
 			} {
-				strumOffset = sustain + strumOffset
+				releaseOffset = sustain + strumOffset
 			};
 			~schedBundleArray.(
-				lag, strumOffset, server,
+				lag, releaseOffset, server,
 				[15 /* \n_set */, ids, \gate, 0].flop,
 				~latency
 			);
@@ -284,7 +281,15 @@ e[\syn].free;
 
 e = (type: \syn, instrument: \default, freq: Plug({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
 
-Event.default[\latency]
+// strum
+// func has same hash, that's not good
+
+e = (type: \syn, instrument: \default, strum: 0.15, freq: Array.fill(2, { |i| Plug({ |basefreq| basefreq + EnvGen.kr(Env.perc(0.01, 0.5), levelScale: 200) }, [basefreq: (i+1) * 300]) }), sustain: 2).play;
+
+
+e = (type: \synOn, instrument: \default, freq: Plug({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
+
+e.put(\type, \synOff).play;
 
 
 
@@ -419,3 +424,57 @@ y.moveToHead(h);
 y.release;
 
 // allNodes should test shared
+
+
+
+
+// get
+x = Synth(\default);
+
+x.get(\flippydoo, _.postln);  // 0
+
+x.free;
+
+"freq".split($/).postcs
+
+// wait up, 'controls' is wrong
+[*freq/rate, IdentityDictionary[(out -> Plug[4042D8F3]), (rate -> Plug[CC3F78F9]), (high -> Plug[4042D8F3]), (low -> Plug[4042D8F3])]]
+
+// nested test has 'rate' at 2 levels:
+// freq/rate and freq/rate/rate
+// *freq/rate --> ??
+// *rate --> ??
+
+[\selector] ++ nil ++ [123]
+
+[123].grow(2)
+
+
+(
+x = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+
+y = x.play;
+)
+
+y.controls['*rate']
+
+y.set('*freq/rate', 1.5);
+
+
+
+v = Voicer(1, Syn(\default), [pan: Plug({ LFDNoise3.kr(1) })]);
+
+v.trigger1(440);
+v.release(440);
+
+v.nodes[0].initArgs
+
+s.sendMsg(\n_trace, 1000)
