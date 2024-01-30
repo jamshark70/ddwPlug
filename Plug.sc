@@ -543,4 +543,157 @@ SynPlayer {
 			{ item }
 		}
 	}
+
+	*initClass {
+		StartUp.add {
+			Event.addEventType(\syn, { |server|
+				var freqs, lag, strum, sustain;
+				var bndl, addAction, sendGate, ids, i;
+				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
+
+				// note, detunedFreq not supported
+				freqs = ~freq.value;
+
+				// msgFunc gets the synth's control values from the Event
+				msgFunc = ~getMsgFunc.valueEnvir;
+				instrumentName = ~synthDefName.valueEnvir;
+
+				sendGate = ~sendGate ? ~hasGate;
+
+				// update values in the Event that may be determined by functions
+				~freq = freqs;
+				~amp = ~amp.value;
+				~sustain = sustain = ~sustain.value;
+				lag = ~lag;
+				offset = ~timingOffset;
+				strum = ~strum;
+				~server = server;
+				~latency = ~latency ?? { server.latency };  // seriously...?
+				~isPlaying = true;
+				addAction = Node.actionNumberFor(~addAction);
+
+				// compute the control values and generate OSC commands
+				bndl = msgFunc.valueEnvir;
+
+				~group = ~group.value;
+				// why? because ~group is (by default) the defaultGroup's ID, not the object
+				~group = Group.basicNew(~server, ~group);
+				~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
+				bndl = ~syn.prepareToBundle(\event);
+				~syn.registerNodes;
+
+				// schedule when the bundles are sent
+
+				if (strum == 0) {
+					{
+						var start = thisThread.seconds;
+						bndl.doPrepare(server, inEnvir {
+							var latency;
+							latency = ~latency + start - thisThread.seconds;
+							~schedBundleArray.(lag, offset, server, bndl.messages, latency);
+						});
+					}.fork(SystemClock);
+					if (sendGate) {
+						~schedBundleArray.(
+							lag,
+							sustain + offset,
+							server,
+							[15 /* \n_set */, ~syn.node.collect(_.nodeID), \gate, 0].flop,
+							~latency
+						);
+					}
+				} {
+					ids = ~syn.node.collect(_.nodeID);
+					// I think I can't support this?
+					// if (strum < 0) {
+					// 	bndl = bndl.reverse;
+					// 	ids = ids.reverse
+					// };
+					strumOffset = Array.series(~syn.node.size, offset, strum.abs);
+					i = bndl.messages.size - ~syn.node.size;
+					{
+						var start = thisThread.seconds;
+						bndl.doPrepare(server, inEnvir {
+							var latency;
+							latency = ~latency + start - thisThread.seconds;
+							~schedBundleArray.(lag,
+								Array.fill(i, offset) ++ strumOffset,
+								server, bndl.messages, latency
+							);
+						});
+					}.fork(SystemClock);
+					if (sendGate) {
+						if (~strumEndsTogether) {
+							releaseOffset = sustain + offset
+						} {
+							releaseOffset = sustain + strumOffset
+						};
+						~schedBundleArray.(
+							lag, releaseOffset, server,
+							[15 /* \n_set */, ids, \gate, 0].flop,
+							~latency
+						);
+					}
+				}
+			});
+			Event.addEventType(\synOn, { |server|
+				var freqs, lag, strum, sustain;
+				var bndl, addAction, sendGate, ids, i;
+				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
+
+				// note, detunedFreq not supported
+				freqs = ~freq.value;
+
+				// msgFunc gets the synth's control values from the Event
+				msgFunc = ~getMsgFunc.valueEnvir;
+				instrumentName = ~synthDefName.valueEnvir;
+
+				sendGate = ~sendGate ? ~hasGate;
+
+				// update values in the Event that may be determined by functions
+				~freq = freqs;
+				~amp = ~amp.value;
+				~sustain = sustain = ~sustain.value;
+				lag = ~lag;
+				offset = ~timingOffset;
+				strum = ~strum;
+				~server = server;
+				~latency = ~latency ?? { server.latency };  // seriously...?
+				~isPlaying = true;
+				addAction = Node.actionNumberFor(~addAction);
+
+				// compute the control values and generate OSC commands
+				bndl = msgFunc.valueEnvir;
+
+				~group = ~group.value;
+				// why? because ~group is (by default) the defaultGroup's ID, not the object
+				~group = Group.basicNew(~server, ~group);
+				~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
+				bndl = ~syn.prepareToBundle(\event);
+				~syn.registerNodes;
+				{
+					var start = thisThread.seconds;
+					bndl.doPrepare(server, inEnvir {
+						var latency;
+						latency = ~latency + start - thisThread.seconds;
+						~schedBundleArray.(lag, offset, server, bndl.messages, latency);
+					});
+				}.fork(SystemClock);
+			});
+			Event.addEventType(\synOff, { |server|
+				if(~hasGate) {
+					~syn.release(
+						~latency ?? { server.latency },
+						min(0.0, ~gate ?? { 0.0 })  // accept release times
+					);
+				} {
+					~syn.free(~latency ?? { server.latency });
+				}
+			});
+			// Event.addEventType(\synSet, {
+			//
+			// });
+			// monoSyn?
+		}
+	}
 }
