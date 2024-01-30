@@ -157,6 +157,12 @@ Plug {
 	setn { |... args|
 		node.setn(*args);
 	}
+	setMsg { |... args|
+		^node.setMsg(*args);
+	}
+	setnMsg { |... args|
+		^node.setnMsg(*args);
+	}
 
 	findOutputChannel { |bundle|
 		var desc, msg, io;
@@ -349,42 +355,43 @@ SynPlayer {
 		};
 	}
 
-	set { |... args|
+	makeSetBundle { |selector(\set) ... args|
+		var bundle = List.new;
+		selector = (selector.asString ++ "Msg").asSymbol;
 		args.pairsDo { |key, value|
 			var map = controls[key];
 			if(map.notNil) {
 				map.keysValuesDo { |ctlname, set|
 					set.do { |object|
 						if(object !== this) {
-							object.set(ctlname, value)
+							bundle.add(object.perform(selector, ctlname, value))
 						} {
-							node.do(_.set(ctlname, value))
+							node.do { |n|
+								bundle.add(n.perform(selector, ctlname, value))
+							};
 						}
 					}
 				}
 			} {
-				node.do(_.set(key, value))  // fallback, just try at the head
+				// fallback, just try at the head
+				node.do { |n|
+					bundle.add(n.perform(selector, key, value))
+				};
 			}
 		};
+		^bundle
 	}
-
+	setToBundle { |... args|
+		^this.makeSetBundle(\set, *args)
+	}
+	setnToBundle { |... args|
+		^this.makeSetBundle(\setn, *args)
+	}
+	set { |... args|
+		this.server.sendBundle(nil, *this.setToBundle(*args))
+	}
 	setn { |... args|
-		args.pairsDo { |key, value|
-			var map = controls[key];
-			if(map.notNil) {
-				map.keysValuesDo { |ctlname, set|
-					set.do { |object|
-						if(object !== this) {
-							object.setn(ctlname, value)
-						} {
-							node.do(_.setn(ctlname, value))
-						}
-					}
-				}
-			} {
-				node.do(_.setn(key, value))  // fallback, just try at the head
-			}
-		};
+		this.server.sendBundle(nil, *this.setnToBundle(*args))
 	}
 
 	moveToHead { |group|
@@ -510,16 +517,22 @@ SynPlayer {
 	rate { ^\audio }
 
 	free { |latency ... why|
-		var bundle = Array(node.size + 2).add([error: -1]);
-		node.do { |n| bundle.add(n.freeMsg) };
-		bundle.add([error: -2]);
-		this.server.sendBundle(latency, *bundle);
+		this.server.sendBundle(latency, *this.freeToBundle);
 		this.didFree(*why);
 	}
 
+	freeToBundle {
+		var bundle = Array(node.size + 2).add([error: -1]);
+		node.do { |n| bundle.add(n.freeMsg) };
+		^bundle.add([error: -2])
+	}
+
 	release { |latency, gate = 0|
-		var bundle = [15, node.collect(_.nodeID), \gate, gate].flop;
-		this.server.sendBundle(latency, *bundle);
+		this.server.sendBundle(latency, *this.releaseToBundle(gate));
+	}
+
+	releaseToBundle { |gate = 0|
+		^[15, node.collect(_.nodeID), \gate, gate].flop
 	}
 
 	didFree { |... why|
