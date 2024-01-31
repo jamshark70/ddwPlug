@@ -301,9 +301,8 @@ SynPlayer {
 		this.sendBundle(bundle, latency);
 	}
 
-	prepareToBundle { |style|
+	prepareToBundle { |style, bundle(OSCBundle.new)|
 		var argList;
-		var bundle = OSCBundle.new;
 
 		if(antecedents.isNil) { antecedents = IdentitySet.new };
 
@@ -360,8 +359,7 @@ SynPlayer {
 		};
 	}
 
-	makeSetBundle { |selector(\set) ... args|
-		var bundle = List.new;
+	makeSetBundle { |selector(\set), bundle(List.new) ... args|
 		selector = (selector.asString ++ "Msg").asSymbol;
 		args.pairsDo { |key, value|
 			var map = controls[key];
@@ -387,17 +385,17 @@ SynPlayer {
 		};
 		^bundle
 	}
-	setToBundle { |... args|
-		^this.makeSetBundle(\set, *args)
+	setToBundle { |bundle(List.new) ... args|
+		^this.makeSetBundle(\set, bundle, *args)
 	}
-	setnToBundle { |... args|
-		^this.makeSetBundle(\setn, *args)
+	setnToBundle { |bundle(List.new) ... args|
+		^this.makeSetBundle(\setn, bundle, *args)
 	}
 	set { |... args|
-		this.server.sendBundle(nil, *this.setToBundle(*args))
+		this.server.sendBundle(nil, *this.setToBundle(nil, *args))
 	}
 	setn { |... args|
-		this.server.sendBundle(nil, *this.setnToBundle(*args))
+		this.server.sendBundle(nil, *this.setnToBundle(nil, *args))
 	}
 
 	moveToHead { |group|
@@ -527,18 +525,19 @@ SynPlayer {
 		this.didFree(*why);
 	}
 
-	freeToBundle {
-		var bundle = Array(node.size + 2).add([error: -1]);
+	freeToBundle { |bundle(List.new)|
+		bundle.add([error: -1]);
 		node.do { |n| bundle.add(n.freeMsg) };
 		^bundle.add([error: -2])
 	}
 
 	release { |latency, gate = 0|
-		this.server.sendBundle(latency, *this.releaseToBundle(gate));
+		this.server.sendBundle(latency, *this.releaseToBundle(nil, gate));
 	}
 
-	releaseToBundle { |gate = 0|
-		^[15, node.collect(_.nodeID), \gate, gate].flop
+	releaseToBundle { |bundle(List.new), gate = 0|
+		bundle = bundle.addAll([15, node.collect(_.nodeID), \gate, gate].flop);
+		^bundle
 	}
 
 	didFree { |... why|
@@ -567,7 +566,7 @@ SynPlayer {
 		StartUp.add {
 			Event.addEventType(\syn, { |server|
 				var freqs, lag, strum, sustain;
-				var bndl, addAction, sendGate, ids, i;
+				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
 
 				// note, detunedFreq not supported
@@ -605,50 +604,61 @@ SynPlayer {
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
 				~group = Group.basicNew(~server, ~group);
-				~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
-				bndl = ~syn.prepareToBundle(\event);
-				~syn.registerNodes;
+				bndl = bndl.flop;
+				oscBundles = Array(bndl.size);
+				~syn = bndl.collect { |args|
+					var n = SynPlayer.basicNew(instrumentName, args, ~group, ~addAction);
+					oscBundles.add(n.prepareToBundle(\event));
+					n.registerNodes  // returns n
+				};
 
 				// schedule when the bundles are sent
 
 				if (strum == 0) {
 					{
 						var start = thisThread.seconds;
-						bndl.doPrepare(server, inEnvir {
-							var latency;
-							latency = ~latency + start - thisThread.seconds;
-							~schedBundleArray.(lag, offset, server, bndl.messages, latency);
-						});
+						oscBundles.do { |bndl|
+							bndl.doPrepare(server, inEnvir {
+								var latency;
+								latency = ~latency + start - thisThread.seconds;
+								~schedBundleArray.(lag, offset, server,
+									bndl.messages, latency);
+							});
+						};
 					}.fork(SystemClock);
 					if (sendGate) {
 						~schedBundleArray.(
 							lag,
 							sustain + offset,
 							server,
-							[15 /* \n_set */, ~syn.node.collect(_.nodeID), \gate, 0].flop,
+							[15 /* \n_set */,
+								~syn.collect { |n| n.node[0].nodeID },
+								\gate, 0
+							].flop,
 							~latency
 						);
 					}
 				} {
-					ids = ~syn.node.collect(_.nodeID);
-					// I think I can't support this?
-					// if (strum < 0) {
-					// 	bndl = bndl.reverse;
-					// 	ids = ids.reverse
-					// };
-					strumOffset = Array.series(~syn.node.size, offset, strum.abs);
-					i = bndl.messages.size - ~syn.node.size;
+					ids = ~syn.collect { |syn| syn.node[0].nodeID };
+					if (strum < 0) {
+						oscBundles = oscBundles.reverse;
+						ids = ids.reverse;
+					};
+					strumOffset = Array.series(~syn.size, offset, strum.abs);
 					{
-						var start = thisThread.seconds;
-						bndl.doPrepare(server, inEnvir {
-							var latency;
-							latency = ~latency + start - thisThread.seconds;
-							~schedBundleArray.(lag,
-								Array.fill(i, offset) ++ strumOffset,
-								server, bndl.messages, latency
-							);
-						});
-					}.fork(SystemClock);
+						oscBundles.do { |oscb, i|
+							var start = thisThread.seconds;
+							oscb.doPrepare(server, inEnvir {
+								var latency;
+								latency = ~latency + start - thisThread.seconds;
+								~schedBundleArray.(lag,
+									offset,
+									server, oscBundles[i].messages, latency
+								);
+							});
+							strum.abs.wait;
+						};
+					}.fork(thisThread.clock);
 					if (sendGate) {
 						if (~strumEndsTogether) {
 							releaseOffset = sustain + offset
@@ -665,7 +675,7 @@ SynPlayer {
 			});
 			Event.addEventType(\synOn, { |server|
 				var freqs, lag, strum, sustain;
-				var bndl, addAction, sendGate, ids, i;
+				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
 
 				// note, detunedFreq not supported
@@ -692,34 +702,68 @@ SynPlayer {
 				// compute the control values and generate OSC commands
 				bndl = msgFunc.valueEnvir;
 
+				bndl.pairsDo { |key, value, i|
+					var plugKey = (key.asString ++ "Plug").asSymbol;
+					var plug = plugKey.envirGet;
+					if(plug.notNil) {
+						bndl[i+1] = plug.dereference.valueEnvir(value)
+					};
+				};
+
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
 				~group = Group.basicNew(~server, ~group);
-				~syn = SynPlayer.basicNew(instrumentName, bndl, ~group, ~addAction);
-				bndl = ~syn.prepareToBundle(\event);
-				~syn.registerNodes;
+				bndl = bndl.flop;
+				oscBundles = Array(bndl.size);
+				~syn = bndl.collect { |args|
+					var n = SynPlayer.basicNew(instrumentName, args, ~group, ~addAction);
+					oscBundles.add(n.prepareToBundle(\event));
+					n.registerNodes  // returns n
+				};
 				{
 					var start = thisThread.seconds;
-					bndl.doPrepare(server, inEnvir {
-						var latency;
-						latency = ~latency + start - thisThread.seconds;
-						~schedBundleArray.(lag, offset, server, bndl.messages, latency);
-					});
+					oscBundles.do { |bndl|
+						bndl.doPrepare(server, inEnvir {
+							var latency;
+							latency = ~latency + start - thisThread.seconds;
+							~schedBundleArray.(lag, offset, server,
+								bndl.messages, latency);
+						});
+					};
 				}.fork(SystemClock);
 			});
 			Event.addEventType(\synOff, { |server|
 				if(~hasGate) {
-					~syn.release(
-						~latency ?? { server.latency },
-						min(0.0, ~gate ?? { 0.0 })  // accept release times
-					);
+					~syn.do { |syn|
+						syn.release(
+							~latency ?? { server.latency },
+							min(0.0, ~gate ?? { 0.0 })  // accept release times
+						);
+					};
 				} {
-					~syn.free(~latency ?? { server.latency });
+					~syn.do { |syn|
+						syn.free(~latency ?? { server.latency });
+					};
 				}
 			});
-			// Event.addEventType(\synSet, {
-			//
-			// });
+
+			// ~syn should be an array of SynPlayers
+			Event.addEventType(\synSet, { |server|
+				var freqs, bndl;
+				var syn = ~syn.asArray;
+
+				freqs = ~freq = ~freq.value;
+				~server = server;
+				~amp = ~amp.value;
+				bndl = ~args.envirPairs.flop;
+
+				bndl.do { |args, i|
+					~schedBundleArray.value(~lag, ~timingOffset, server,
+						syn.wrapAt(i).setToBundle(nil, *args),
+						~latency
+					);
+				};
+			});
 			// monoSyn?
 		}
 	}
