@@ -41,7 +41,15 @@
 // do we really want to do this?
 + Function {
 	asPluggable { |dest, downstream, bundle, controlDict|
-		Error("Functions not supported in Syn yet").throw;
+		// e.g.
+		// Syn(\something, [input: { |freq| Plug(\lfo, [basefreq: freq]) }])
+		^this.valueEnvir.asPluggable(dest, downstream, bundle, controlDict)
+	}
+}
+
++ Ref {
+	asPluggable { |dest, downstream, bundle, controlDict|
+		^this.dereference.valueEnvir.asPluggable(dest, downstream, bundle, controlDict)
 	}
 }
 

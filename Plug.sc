@@ -594,6 +594,14 @@ SynPlayer {
 				// compute the control values and generate OSC commands
 				bndl = msgFunc.valueEnvir;
 
+				bndl.pairsDo { |key, value, i|
+					var plugKey = (key.asString ++ "Plug").asSymbol;
+					var plug = plugKey.envirGet;
+					if(plug.notNil) {
+						bndl[i+1] = plug.dereference.valueEnvir(value)
+					};
+				};
+
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
 				~group = Group.basicNew(~server, ~group);
