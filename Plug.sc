@@ -251,48 +251,16 @@ Plug {
 
 Syn {
 	var <>source, <>args, <>target, <>addAction;
-
-	// unlike Synth, does *not* send
-	// you need to 'play' it
-	// this way, one template can play multiple complexes
-	*new { |source, args, target(Server.default.defaultGroup), addAction = \addToHead|
-		^super.newCopyArgs(source, args, target, addAction)
-	}
-
-	play { |argTarget, argAddAction, argArgs, latency|
-		^SynPlayer(
-			source,
-			argArgs ?? { args },  // merge?
-			argTarget ?? { target },
-			argAddAction ?? { addAction },
-			latency ?? { target.server.latency }
-		)
-	}
-
-	eventPlay { |argTarget, argAddAction, argArgs, latency|
-		^SynPlayer(
-			source,
-			argArgs ?? { args },  // merge?
-			argTarget ?? { target },
-			argAddAction ?? { addAction },
-			latency ?? { target.server.latency },
-			\event
-		)
-	}
-}
-
-SynPlayer {
-	var <>source, <>args, <>target, <>addAction;
 	var <node, <group, watcher, nodeIDs;
 	var <antecedents;
 	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 
-	*new { |source, args, target, addAction, latency, style(\synth)|
+	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency, style(\synth)|
 		^super.newCopyArgs(source, args, target, addAction).init(latency, style);
 	}
 
-	*basicNew { |source, args, target, addAction|
+	*basicNew { |source, args, target(Server.default.defaultGroup), addAction(\addToTail)|
 		^super.newCopyArgs(source, args, target, addAction)
 	}
 
@@ -480,7 +448,7 @@ SynPlayer {
 
 	// name/subname --> a specific plug
 	// *name/subname --> that plug and all children
-	// name --> the SynPlayer
+	// name --> the Syn
 	// *name --> everywhere
 	// maybe make these Sets?
 	addControl { |object, name|
@@ -607,7 +575,7 @@ SynPlayer {
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
-					var n = SynPlayer.basicNew(instrumentName, args, ~group, ~addAction);
+					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle(\event));
 					n.registerNodes  // returns n
 				};
@@ -716,7 +684,7 @@ SynPlayer {
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
-					var n = SynPlayer.basicNew(instrumentName, args, ~group, ~addAction);
+					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle(\event));
 					n.registerNodes  // returns n
 				};
@@ -747,7 +715,7 @@ SynPlayer {
 				}
 			});
 
-			// ~syn should be an array of SynPlayers
+			// ~syn should be an array of Syns
 			Event.addEventType(\synSet, { |server|
 				var freqs, bndl;
 				var syn = ~syn.asArray;
@@ -769,7 +737,7 @@ SynPlayer {
 	}
 }
 
-// need to track client SynPlayers and Plugs using an auto-generated synthdef
+// need to track client Syns and Plugs using an auto-generated synthdef
 SynthDefTracker {
 	// Dict: server -> defname (symbol) -> Set of clients
 	classvar all;
