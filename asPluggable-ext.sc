@@ -68,9 +68,9 @@
 	sendOnTime { |server, delta|
 		var callTime = SystemClock.seconds;
 		this.doPrepare(server, {
-			this.prSend(server,
+			server.sendBundle(
 				(delta ?? { server.latency }) + callTime - SystemClock.seconds,
-				callTime
+				*messages
 			);
 		});
 	}
