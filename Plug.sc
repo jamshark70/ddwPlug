@@ -56,25 +56,30 @@ p = Pbind(
 You have one instance of Plug but you need one for each event.
 So Plug will have to manufacture an instance of something.
 Another class? Or 'copy' the Plug and set a flag?
+
+map: \sym1 -> \sym2
+\sym1 is control name in the parent, if set it should translate to child \sym2
 */
 
 Plug {
 	var <source, <args, <rate, <numChannels;
+	var <>map;
 	var <node, <dest;
 	var <bus;  // use AutoReleaseBus
-	// var nodes;
+	var <concreteArgs, argLookup;
 	var <antecedents, <descendants;
 	var <isConcrete = false;
+	var synthDesc;
 
 	// Plug also needs to be told the destination
 	// I think this is asPluggable?
 
-	*new { |source, args, rate = \control, numChannels = 1|
-		^super.newCopyArgs(source, args, rate, numChannels).init
+	*new { |source, args, rate = \control, numChannels = 1, map|
+		^super.newCopyArgs(source, args, rate, numChannels, map).init
 	}
 
-	*shared { |source, args, rate = \control, numChannels = 1|
-		^this.new(source, args, rate, numChannels).prConcrete_(true)
+	*shared { |source, args, rate = \control, numChannels = 1, map|
+		^this.new(source, args, rate, numChannels, map).prConcrete_(true)
 	}
 
 	init {
@@ -103,7 +108,6 @@ Plug {
 	}
 
 	asPluggable { |argDest, downstream, bundle, controlDict|
-		var argList;
 		if(isConcrete) {
 			// [argDest, downstream, bundle, controlDict.proto, controlDict].debug("Plug:asPluggable");
 			dest = argDest;
@@ -111,37 +115,33 @@ Plug {
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
 				// only one synth per plug, for now
-				argList = [
-					args.asOSCPlugArray(dest, this, bundle, controlDict)
-				];
+				// array wrapper is for consistency with 'preparePlug...' methods
+				concreteArgs = [args.asOSCPlugArray(dest, this, bundle, controlDict)];
 				// preparation messages, bundle messages
-				// preparePlugSource gives one node per argList entry
-				node = source.preparePlugSource(this, bundle, argList)
+				// preparePlugSource gives one node per concreteArgs entry
+				node = source.preparePlugSource(this, bundle, concreteArgs)
 				.at(0);  // one synth for now
 				// bundle is a sneaky way to extract a Function's def
 				// though probably inadequate for some future requirement
 				this.findOutputChannel(bundle);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
-				argList[0] = argList[0] ++ [out: bus, i_out: bus];
+				concreteArgs[0] = concreteArgs[0] ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
 					this,
 					bundle,
-					argList,
+					concreteArgs.collect(_.asOSCArgArray),
 					controlDict,
 					*dest.bundleTarget
 				);
 				dest.lastPlug = this;  // only set if this time made a node
+				this.initArgLookup(concreteArgs);
 			};
 
-			// if(nodes.includes(dest).not) {
-			// 	nodes.add(dest);
-			// };
 			// these are all Sets so multiple adds are OK (no redundancy)
 			bus.addClient(this);
 			bus.addClient(downstream);
 			downstream.addDependant(this);
 			downstream.addDependant(bus);
-			^this.asMap;
 		} {
 			^this.concreteInstance.asPluggable(argDest, downstream, bundle, controlDict);
 		}
@@ -190,13 +190,14 @@ Plug {
 				rate = io.rate;
 				numChannels = io.numberOfChannels;
 			};
+			synthDesc = desc;
 
-			// also slightly cheating, but I have the def here, so...
-			// desc.debug("adding controls for desc");
-			// dest.controls.proto[\path].debug("path is currently");
-			desc.controls.do { |cn|
-				dest.addControl(this, cn.name);
-			};
+			// // also slightly cheating, but I have the def here, so...
+			// // desc.debug("adding controls for desc");
+			// // dest.controls.proto[\path].debug("path is currently");
+			// desc.controls.do { |cn|
+			// 	dest.addControl(this, cn.name);
+			// };
 		};  // else don't touch the user's rate / numChannels
 	}
 
@@ -217,7 +218,7 @@ Plug {
 	asControlInput { ^this.asMap }
 
 	concreteInstance {
-		^this.class.new(source, args, rate, numChannels).prConcrete_(true)
+		^this.class.new(source, args, rate, numChannels, map).prConcrete_(true)
 	}
 
 	prConcrete_ { |bool(false)|
@@ -238,6 +239,18 @@ Plug {
 	printOn { |stream|
 		stream << this.class.name << "[" << this.hash.asHexString(8) << "]";
 	}
+
+	initArgLookup { |args|
+		argLookup = IdentityDictionary.new;
+		args.flop.pairsDo { |keys, values|
+			// keys is an array but all elements should be the same
+			argLookup.put(keys[0], values);
+		};
+	}
+	argAt { |key| ^argLookup[key] }
+	controlNames {
+		^if(synthDesc.notNil) { synthDesc.controlNames }
+	}
 }
 
 // like Synth but makes a bundle, including plug sources
@@ -254,6 +267,7 @@ Syn {
 
 	var <>source, <>args, <>target, <>addAction;
 	var <node, <group, watcher, nodeIDs;
+	var <concreteArgs, argLookup;
 	var <antecedents;
 	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
@@ -295,14 +309,15 @@ Syn {
 		} {
 			argList = [args];
 		};
-		argList = argList.collect { |a| a.asOSCPlugArray(this, this, bundle, controls) };
+		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle, controls) };
+		this.initArgLookup(concreteArgs);
 
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
 		node = source.preparePlugSource(this, bundle, argList);
 		this.addControls(bundle);
 		source.preparePlugBundle(
-			this, bundle, argList, controls,
+			this, bundle, concreteArgs.collect(_.asOSCArgArray), controls,
 			*this.bundleTarget
 		);
 
@@ -443,36 +458,62 @@ Syn {
 		};
 		if(desc.notNil) {
 			desc.controls.do { |cn|
-				this.addControl(this, cn.name);
+				this.addControl(this, cn.name, Array.new);
 			};
 		};  // else don't touch the user's rate / numChannels
 	}
 
 	// name/subname --> a specific plug
-	// *name/subname --> that plug and all children
 	// name --> the Syn
+	// * controls, dropped for now, too complicated and maybe not meaningful
+	// *name/subname --> that plug and all children
 	// *name --> everywhere
-	// maybe make these Sets?
-	addControl { |object, name|
-		var path = controls.proto[\path] ++ [name], key;
+	addControl { |object, name, path|
+		var key;
+		var a;
 		var addTo = { |dict, name, object|
 			if(dict[name].isNil) {
 				dict[name] = IdentitySet.new;
 			};
 			dict[name].add(object);
 		};
-		key = path.join($/).asSymbol;
-		// add single referent
+
+		key = (path ++ [name]).join($/).asSymbol;
 		if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
-		addTo.(controls[key], name, object);
-		// all parent levels
-		path.size.do {
-			key = ("*" ++ path.join($/)).asSymbol;
-			if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
+
+		a = object.argAt(name);
+		// have: this object, cname, path
+		// want: child plug and mapped cname
+		if(a.notNil and: { a[0].isKindOf(Plug) }) {
+			a.do { |child|  // this loop is always top-level
+				var obj = child, obj2;
+				var mapKey = name;
+				while {
+					if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
+						mapKey = obj.map[mapKey];
+					};  // else use old mapKey
+					obj.controlNames.do { |name|
+						this.addControl(obj, name, path ++ [mapKey.asString]);
+					};
+					obj2 = obj.argAt(mapKey);
+					obj2.notNil and: { obj2[0].isKindOf(Plug) }
+				} {
+					obj = obj2[0];
+				};
+				addTo.(controls[key], mapKey, obj);
+			};
+		} {
 			addTo.(controls[key], name, object);
-			if(path.size > 1) { path.removeAt(path.size - 2) };
 		};
 	}
+	initArgLookup { |args|
+		argLookup = IdentityDictionary.new;
+		args.flop.pairsDo { |keys, values|
+			// keys is an array but all elements should be the same
+			argLookup.put(keys[0], values);
+		};
+	}
+	argAt { |key| ^argLookup[key] }
 
 	server { ^target.server }
 	dest { ^this }
