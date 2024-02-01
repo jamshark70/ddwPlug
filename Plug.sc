@@ -250,6 +250,8 @@ Plug {
 // only non-plug controls
 
 Syn {
+	classvar <>useGroup = false;
+
 	var <>source, <>args, <>target, <>addAction;
 	var <node, <group, watcher, nodeIDs;
 	var <antecedents;
@@ -274,7 +276,7 @@ Syn {
 
 		if(antecedents.isNil) { antecedents = IdentitySet.new };
 
-		if(#[synthgroup, eventgroup].includes(style)) {
+		if(useGroup or: { #[synthgroup, eventgroup].includes(style) }) {
 			group = Group.basicNew(target.server);  // note, children can get this from 'dest'
 			bundle.add(group.newMsg(target, addAction));
 		};
@@ -494,9 +496,14 @@ Syn {
 	}
 
 	freeToBundle { |bundle(List.new)|
-		bundle.add([error: -1]);
-		node.do { |n| bundle.add(n.freeMsg) };
-		^bundle.add([error: -2])
+		if(group.notNil) {
+			bundle.add([11, group.nodeID])
+		} {
+			bundle.add([error: -1]);
+			node.do { |n| bundle.add(n.freeMsg) };
+			bundle.add([error: -2])
+		};
+		^bundle
 	}
 
 	release { |latency, gate = 0|
