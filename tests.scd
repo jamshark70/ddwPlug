@@ -40,7 +40,7 @@ o.sendOnTime(s, 0.2);
 x = Syn(\default, [freq: 400]);
 y = x.play;
 
-y.release;
+x.release;
 
 z = x.play;
 z.release;
@@ -49,9 +49,8 @@ z.release;
 
 // simple cable
 x = Syn(\default, [freq: Plug(\freqlfo, [rate: 3])]);
-y = x.play;
 
-y.release;
+x.release;
 
 s.controlBusAllocator.debug  // all freed, good!
 
@@ -67,15 +66,16 @@ x = Syn(\default, [
 	),
 	amp: 0.05
 ]);
-
-y = x.play;
 )
 
-y.release;
+x.release;
+
+x.concreteArgs
+x.concreteArgs[0][1].concreteArgs
 
 Object.dependantsDictionary.keysValuesDo { |key, value| [key, value].postln }; ""
 
-y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+x.controls.keysValuesDo { |k, v| [k, v].postln }; ""
 
 // init
 [class ProxyChain, IdentitySet[a Function]]
@@ -108,9 +108,8 @@ y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
 x = Syn(\default, [
 	freq: Plug({ LFDNoise3.kr(8).exprange(200, 800) })
 ]);
-y = x.play;
 
-y.release;
+x.release;
 
 
 // shared cable
@@ -121,12 +120,11 @@ x = Syn(\default, [
 	pan: cable = Plug.shared({ SinOsc.kr(SinOsc.kr(0.2).exprange(0.5, 4)) }),
 	amp: cable
 ]);
-y = x.play;
 )
 
 y.node.trace
 
-y.release;
+x.release;
 
 s.sendMsg(\n_trace, 1012);
 
@@ -140,22 +138,23 @@ s.sendMsg(\n_trace, 1012);
 // but in1 and in2 are
 
 (
-// note, not defined within the thing
+// note, doesn't need to be defined within the Syn
 var freqPlug = Plug({ LFDNoise3.kr(8).exprange(200, 800) });
 
 x = Syn(
-	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) /** 0.05*/ },
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) },
 	[
-		in1: Plug(\default, [freq: freqPlug]/*, \audio, 2*/),
-		in2: Plug(\default, [freq: freqPlug]/*, \audio, 2*/)
+		in1: Plug(\default, [freq: freqPlug, pan: -0.5]),
+		in2: Plug(\default, [freq: freqPlug, pan: 0.5])
 	]
 );
-y = x.play;
 )
 
 y.nodeAt(0).trace
 
-y.release;
+x.release;
+
+x.argAt(\in1)
 
 s.audioBusAllocator.debug
 
@@ -165,14 +164,39 @@ s.audioBusAllocator.debug
 x = Syn(\default, [
 	freq: (3..5).collect { |i|
 		Plug({ (1.1 ** LFDNoise3.kr(3)) * (200 * i) })
-	}
-].debug("arglist"));
-y = x.eventPlay;
+	},
+	pan: #[-0.5, 0, 0.5].scramble
+], style: \event);
 )
 
 s.sendMsg(\n_trace, 1001);
 
-y.release;
+x.release;
+
+x.concreteArgs
+
+x.concreteArgs.flop
+
+x.argAt(\freq)
+
+// nested multichannel, this is nuts
+(
+x = Syn(\default, [
+	freq: (3..5).collect { |i|
+		Plug({ |factor, lfo| factor * lfo }, [
+			factor: 200 * i,
+			lfo: Plug({ 1.1 ** LFDNoise3.kr(3) })
+		])
+	},
+	pan: #[-0.5, 0, 0.5].scramble
+], style: \event);
+)
+
+x.release;
+
+x.argAt(\freq)
+x.argAt(\freq)[1].argAt(\lfo)
+
 
 // note: cannot do math ops on a Plug
 // maybe make it an AbstractFunction?
@@ -289,9 +313,39 @@ e = (type: \syn, instrument: \default, strum: 0.15, freq: Array.fill(2, { |i| Pl
 
 e = (type: \synOn, instrument: \default, freq: Plug({ LFDNoise3.kr(2).range(200, 800) }), pan: [-0.5, 0.5], sustain: 2).play;
 
+e.putAll((type: \synSet, args: [\pan], pan: [0.5, -0.5])).play;
+
 e.put(\type, \synOff).play;
 
 
+// works, but no way to have two 'freq' entries
+e = (type: \syn, instrument: \default, freqq: 440, freq: `{ |freqq| currentEnvironment.debug("in freq func"); Plug(\freqlfo, [rate: 3, low: freqq * 0.5, high: freqq * 2]) }, sustain: 2).play;
+
+currentEnvironment.debug("in freq func");
+
+e = (type: \syn, instrument: \default, freq: 440, freqPlug: { |freq| Plug(\freqlfo, [rate: 3, low: freq * 0.5, high: freq * 2]) }, sustain: 3).play;
+
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\rate, Pexprand(2.0, 9.0, inf),
+	\ratio, Pexprand(1.25, 3.5, inf),
+	\freq, Pexprand(300, 700, inf),
+	// has access to values in the event
+	// and the function is evaluated last, so order doesn't really matter
+	\freqPlug, { |freq, rate, ratio|
+		Plug(\freqlfo, [rate: rate, low: freq / ratio, high: freq * ratio])
+	},
+	\dur, Pexprand(0.1, 1.5, inf),
+	\legato, Pexprand(0.6, 3.0, inf),
+	\pan, Pwhite(0.4, 0.8, inf) * Prand([-1, 1], inf),
+).play;
+)
+
+p.stop;
+
+s.controlBusAllocator.debug;
 
 // order of exec
 // nested cable
@@ -451,7 +505,7 @@ x.free;
 
 
 (
-x = Syn(\default, [
+y = Syn(\default, [
 	freq: Plug(
 		\freqlfo,
 		[rate: Plug(
@@ -460,14 +514,37 @@ x = Syn(\default, [
 	),
 	amp: 0.05
 ]);
-
-y = x.play;
 )
+
+y.set(\freq, 100);
+
+y.set('freq/rate/rate', 2, 'freq/rate/high', 10);
+y.set('freq/rate', 5, 'freq/high', 1000);
+
+y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+y.release;
+
+(
+y = Syn(\default, [
+	freq: Plug(\freqlfo, [rate: 1.7]),
+	amp: 0.05
+]);
+)
+
+// no effect because main synth has no 'rate' input
+// (sends message, but it fails)
+y.set(\rate, 4);
+
+// yes, operates on the Plug
+y.set('freq/rate', 22);
 
 y.controls['*rate']
 
+// this breaks the link though
 y.set('*freq/rate', 1.5);
 
+y.release;
 
 
 v = Voicer(1, Syn(\default), [pan: Plug({ LFDNoise3.kr(1) })]);
@@ -475,6 +552,315 @@ v = Voicer(1, Syn(\default), [pan: Plug({ LFDNoise3.kr(1) })]);
 v.trigger1(440);
 v.release(440);
 
+v.trigger1(440);
+v.trigger1(660);
+v.release(660);
+
 v.nodes[0].initArgs
 
 s.sendMsg(\n_trace, 1000)
+
+
+
+// slurs?
+(
+(
+keys: #[master, rvbmc],
+initLevel: -12.dbamp,
+rvbLevel: -6.dbamp,
+make: { |name|
+	var out;
+	~target = MixerChannel(name, s, 2, 2, ~initLevel, outbus: ~master, completionFunc: { |chan|
+		chan.newPostSend(~rvbmc, ~rvbLevel);
+	});
+
+	out = Voicer(10,
+		Syn.basicNew(\anaspl),
+		[
+			pmix: 0.8,
+			pwidth: Plug({ SinOsc.kr(2.5) * 0.45 + 0.5 })
+		],
+		target: ~target
+	);
+	out.mapGlobal(\ffreq, nil, 2500, \freq);
+	out
+},
+free: { ~target.free },
+type: \vc) => Fact(\testVC);
+)
+
+BP(\t).free; VC(\t).free;
+/make(testVC:t/melBP:t);
+/t =>.0 t;
+
+/t = "[****]::\ser*3..5("12156,")::\artic("\seq("~\seq*1..3("_")")")";
+
+/t = "[1,~1''~1~1']";
+/t(set(\freqPlug, { |freq| Plug({ |freq| freq * LFDNoise3.kr(2.5).exprange(0.7, 1.4) }, [freq: freq]) }));
+
+/t = "[****]::\ser*3..5("12156,")";
+
+/t(set(\freqPlug, Pif(Punop('coin', 0.15), { |freq| Plug({ |freq| freq * EnvGen.kr(Env([3, 1], [0.08], \exp)) }, [freq: freq]) }, 0))));
+
+/t = "\ins("*", 5..10, 0.25)::\ser*3..7("10785'26")::\artic("~__")";
+
+/t = "\ins("*", 5..10, 0.25)::\ser*3..11("10785'9'6'3'526")::\artic("\wrand("~_.>~", 3, 2, 1, 1)")";
+
+/t(set(\freqPlug, { |freq, acc| if(acc > 0) { Plug({ |freq, acc| freq * EnvGen.kr(Env([(acc*2)+1, 1], [0.08], \exp)) }, [freq: freq, acc: acc]) } { freq } }));
+
+BP('t')[\ffxx].release; BP('t').ffxx = BP('t').asMixer.playfx { |outbus| var sig = In.ar(outbus, 2); sig = sig + (0.7 * CombC.ar(sig, 10, [0.75, 1.25] / Lag.kr(~tempoCtl.kr, 0.05), 6)) };
+
+VC(\t).panic
+
+s.controlBusAllocator.debug;
+
+BusDict.controlObjects[s].keys.maxItem
+
+// /t(set(\freqPlug, { |freq| Plug({ freq * (EnvGen.kr(Env.perc(0.1, 0.08)) * 0.4 + 1) }) }));
+//
+// /t(set(\ratio, Pexprand(1.1, 1.5, inf), \freqPlug, { |freq, ratio| Plug({ freq * (EnvGen.kr(Env.perc(0.005, 0.08)) * (ratio-1) + 1) }) }));
+
+/t = "[****]::\ser*3..5("12156,")::\ins("@", 5..9, 0.25)::\pitch("@", "4567", 0, 3, ".")";
+
+BP('t')[\ffxx].release; BP('t').ffxx = BP('t').asMixer.playfx { |outbus| var sig = In.ar(outbus, 2); sig = sig + (0.7 * CombC.ar(sig, 10, [1.25, 2.25] / Lag.kr(~tempoCtl.kr, 0.05), 6)) };
+
+// preparing twice? why?
+
+/t = "1";
+
+/t+;
+VC(\t).playingNodes.do(_.dump);
+/t-;
+
+/hh.(\hardhh);
+/hhh = "....";
+
+x.prArticulate1
+
+BP(\t).event
+
+VC(\t).nodes[0].initArgDict
+
+/t/hhh-
+
+
+
+// help examples
+(
+a = Syn(\default, [
+	freq: Plug {
+		LFSaw.kr(
+			LFTri.kr(0.2).exprange(0.5, 12)
+		).exprange(150, 950)
+	}
+]);
+)
+
+s.queryAllNodes;
+
+NODE TREE Group 0
+   1 group
+      1000 971719531
+      1001 default
+
+a.release;
+
+
+Syn.useGroup = true;
+
+
+SynthDescLib.at(\default).controlNames
+
+// new 'controls'
+// simple cable
+x = Syn(\default, [freq: Plug(\freqlfo, [rate: 3])]);
+
+x = Syn(\default, [freq: Plug(\freqlfo, [rate: 3], map: (freq: \rate))]);
+
+x.release;
+
+x.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+x.set(\freq, 12);
+x.set('freq/high', 6000);
+
+x.setToBundle(nil, \freq, 12)
+
+(
+e = (type: \synOn, freq: 300, freqPlug: { |freq|
+	Plug({ |freq, rate| freq * (1.5 ** LFDNoise3.kr(rate)) }, [freq: freq, rate: 3])
+}).play;
+)
+
+e.syn[0].controls
+
+e.syn[0].controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+[out, IdentityDictionary[(out -> IdentitySet[a Syn])]]
+
+// this one is wrong, shouldn't it be freq/i_out?
+[freq/freq, IdentityDictionary[(rate -> IdentitySet[Plug[91D27655]]), (freq -> IdentitySet[Plug[91D27655]]), (i_out -> IdentitySet[Plug[91D27655]])]]
+[amp, IdentityDictionary[(amp -> IdentitySet[a Syn])]]
+[pan, IdentityDictionary[(pan -> IdentitySet[a Syn])]]
+[gate, IdentityDictionary[(gate -> IdentitySet[a Syn])]]
+[freq, IdentityDictionary[(freq -> IdentitySet[Plug[91D27655]])]]
+
+
+e.putPairs([\type, \synSet, args: [\freq], freq: 1000]).play;
+
+e.put(\type, \synOff).play;
+
+e = (type: \synOn, freq: 300).play;
+e.put(\type, \synSet, args: #[freq], freq: 400).play;
+
+
+// 3 point modulation
+(
+SynthDef(\modLin, { |out, base, mod, depth|
+	Out.kr(out, base + (depth * mod));
+}).add;
+
+SynthDef(\modExp, { |out, base, mod, depth|
+	Out.kr(out, base * (depth ** mod));
+}).add;
+
+SynthDef(\lfTri, { |out, rate = 1|
+	Out.kr(out, LFTri.kr(rate));
+}).add;
+)
+
+(
+x = Syn(\default, [
+	freq: Plug(\modExp, [
+		base: 400,
+		mod: Plug(\lfTri),
+		depth: 1.7
+	])
+]);
+)
+
+x.set("freq/base", 700);
+
+x.release;
+
+
+
+(
+x = Syn(\default, [
+	freq: Plug(\modExp, [
+		base: 400,
+		mod: Plug(\lfTri),
+		depth: 1.7
+	], map: (freq: \base))
+]);
+)
+
+// affects base, does not break modulation!
+x.set("freq", 700);
+
+x.set("freq/depth", 1.05, "freq/mod/rate", 6);
+
+p = Pbind(\type, \synSet, \syn, x, \args, [\freq], \degree, Pwhite(-7, 7, inf), \dur, 0.25).play;
+
+p.stop; x.release;
+
+p.stop;
+
+
+
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\dur, Pwhite(1, 5, inf) * 0.25,
+	\legato, 0.98,
+	// frequency stuff
+	\degree, Pwhite(-7, 7, inf),
+	\freqPlug, { |freq|  // <-- base value gets patched here
+		// lazy: I'll just use an ad-hoc function
+		Plug({ |freq|
+			(
+				EnvGen.kr(Env([1, 1.06], [0.7], 4))
+				**
+				LFTri.kr(4)
+			) * freq
+		}, [freq: freq])
+	}
+).play;
+)
+
+p.stop;
+
+
+
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\dur, Pwhite(1, 5, inf) * 0.25,
+	\legato, 0.98,
+	// frequency stuff
+	\degree, Pwhite(-7, 7, inf),
+	\freqPlug, { |freq|  // <-- base value gets patched here
+		// lazy: I'll just use an ad-hoc function
+		Plug({ |freq, depth|
+			(depth ** LFTri.kr(4)) * freq
+		}, [
+			freq: freq,
+			depth: Plug({ EnvGen.kr(Env([1, 1.06], [0.7], 4)) })
+		])
+	}
+).play;
+)
+
+p.stop;
+
+
+
+x = Syn(\default, [freq: rrand(300, 700)]);
+x.release;
+
+x = Syn(\default, [
+	freq: Plug({
+		LFDNoise0.kr(
+			LFSaw.kr(0.2).exprange(2, 10)
+		).exprange(200, 800)
+	})
+]);
+
+x.release;
+
+
+
+(
+var modPlug = Plug({ LFDNoise3.kr(4) });
+
+x = Syn(\default, [
+	freq: (150 * [3, 4, 5]).collect { |freq|
+		Plug({ |freq, mod, depth = 1.5|
+			freq * (depth ** mod)
+		}, [freq: freq, mod: modPlug])
+	}
+], style: \event);
+)
+
+x.release;
+
+
+Syn.useGroup = true;
+
+(
+var modPlug = Plug.shared({ LFDNoise3.kr(4) });
+
+x = Syn(\default, [
+	freq: (150 * [3, 4, 5]).collect { |freq|
+		Plug({ |freq, mod, depth = 1.5|
+			freq * (depth ** mod)
+		}, [freq: freq, mod: modPlug])
+	}
+], latency: nil, style: \event);
+)
+
+x.release;
+
+x.allNodes
