@@ -497,8 +497,8 @@ Syn {
 					if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
 						mapKey = obj.map[mapKey];
 					};  // else use old mapKey
-					obj.controlNames.do { |name|
-						this.addControl(obj, name, path ++ [mapKey.asString]);
+					obj.controlNames.do { |cn|
+						this.addControl(obj, cn, path ++ [name.asString]);
 					};
 					obj2 = obj.argAt(mapKey);
 					obj2.notNil and: { obj2[0].isKindOf(Plug) }
