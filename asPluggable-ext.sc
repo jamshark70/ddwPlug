@@ -67,13 +67,20 @@
 
 + OSCBundle {
 	sendOnTime { |server, delta|
-		var callTime = SystemClock.seconds;
-		this.doPrepare(server, {
-			server.sendBundle(
-				(delta ?? { server.latency }) + callTime - SystemClock.seconds,
-				*messages
-			);
-		});
+		var callTime;
+		if(delta.isNil) {
+			this.doPrepare(server, {
+				server.sendBundle(nil, *messages)
+			})
+		} {
+			callTime = SystemClock.seconds;
+			this.doPrepare(server, {
+				server.sendBundle(
+					delta + callTime - SystemClock.seconds,
+					*messages
+				);
+			});
+		}
 	}
 }
 

@@ -328,7 +328,7 @@ Syn {
 	}
 
 	sendBundle { |bundle, latency|
-		bundle.sendOnTime(target.server, latency ?? { target.server.latency });
+		bundle.sendOnTime(target.server, latency);
 		this.registerNodes;
 	}
 
@@ -363,7 +363,9 @@ Syn {
 		};
 		selector = (selector.asString ++ "Msg").asSymbol;
 		args.pairsDo { |key, value|
-			var map = controls[key];
+			var map;
+			key = key.asSymbol;
+			map = controls[key];
 			value = value.asControlInput;
 			if(map.notNil) {
 				doMap.(map, key, value);
