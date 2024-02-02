@@ -370,11 +370,6 @@ Syn {
 				map = controls[key];
 				if(map.notNil) {
 					doMap.(map, key, value);
-				} {
-					// fallback, just try at the head
-					node.do { |n|
-						bundle.add(n.perform(selector, key, value))
-					};
 				};
 			}
 		};
@@ -497,6 +492,7 @@ Syn {
 			a.do { |child|  // this loop is always top-level
 				var obj = child, obj2;
 				var mapKey = name;
+				var cnames;
 				while {
 					if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
 						mapKey = obj.map[mapKey];
@@ -509,7 +505,11 @@ Syn {
 				} {
 					obj = obj2[0];
 				};
-				addTo.(controls[key], mapKey, obj);
+
+				cnames = obj.controlNames;
+				if(cnames.isNil or: { cnames.includes(mapKey) }) {
+					addTo.(controls[key], mapKey, obj);
+				};
 			};
 		} {
 			addTo.(controls[key], name, object);
