@@ -35,7 +35,7 @@
 		^this.asPluggable(dest, downstream, bundle, controlDict)
 	}
 	// asOSCPlugBundle { |dest| ^this.asPluggable(dest, controlDict) }
-
+	canMakePlug { ^false }
 }
 
 // do we really want to do this?
@@ -51,6 +51,7 @@
 	asPluggable { |dest, downstream, bundle, controlDict|
 		^this.dereference.valueEnvir.asPluggable(dest, downstream, bundle, controlDict)
 	}
+	canMakePlug { ^value.canMakePlug }
 }
 
 // should not be polyphonic? NodeProxies don't auto-spawn
@@ -130,4 +131,5 @@
 		};
 		^dest.node
 	}
+	canMakePlug { ^true }
 }

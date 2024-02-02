@@ -251,6 +251,8 @@ Plug {
 	controlNames {
 		^if(synthDesc.notNil) { synthDesc.controlNames }
 	}
+
+	canMakePlug { ^true }
 }
 
 // like Synth but makes a bundle, including plug sources
@@ -621,7 +623,7 @@ Syn {
 				bndl.pairsDo { |key, value, i|
 					var plugKey = (key.asString ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
-					if(plug.notNil) {
+					if(plug.canMakePlug) {
 						bndl[i+1] = plug.dereference.valueEnvir(value)
 					};
 				};
@@ -730,7 +732,7 @@ Syn {
 				bndl.pairsDo { |key, value, i|
 					var plugKey = (key.asString ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
-					if(plug.notNil) {
+					if(plug.canMakePlug) {
 						bndl[i+1] = plug.dereference.valueEnvir(value)
 					};
 				};
