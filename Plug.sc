@@ -276,14 +276,14 @@ Syn {
 	var <synthDesc;
 
 	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency, style(\synth)|
-		^super.newCopyArgs(source, args, target, addAction).init(latency, style);
+		^super.newCopyArgs(source, args, target, addAction).play(latency, style);
 	}
 
 	*basicNew { |source, args, target(Server.default.defaultGroup), addAction(\addToTail)|
 		^super.newCopyArgs(source, args, target, addAction)
 	}
 
-	init { |latency, style|
+	play { |latency, style|
 		var bundle = this.prepareToBundle(style);
 		this.sendBundle(bundle, latency);
 	}
