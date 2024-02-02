@@ -271,6 +271,7 @@ Syn {
 	var <antecedents;
 	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
+	var <synthDesc;
 
 	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency, style(\synth)|
 		^super.newCopyArgs(source, args, target, addAction).init(latency, style);
@@ -315,7 +316,7 @@ Syn {
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
 		node = source.preparePlugSource(this, bundle, argList);
-		this.addControls(bundle);
+		this.getSynthDesc(bundle);
 		source.preparePlugBundle(
 			this, bundle, concreteArgs.collect(_.asOSCArgArray), controls,
 			*this.bundleTarget
@@ -345,26 +346,35 @@ Syn {
 	}
 
 	makeSetBundle { |selector(\set), bundle(List.new) ... args|
+		var doMap = { |map, key, value|
+			map.keysValuesDo { |ctlname, set|
+				set.do { |object|
+					if(object !== this) {
+						bundle.add(object.perform(selector, ctlname, value))
+					} {
+						node.do { |n|
+							bundle.add(n.perform(selector, ctlname, value))
+						};
+					}
+				}
+			}
+		};
 		selector = (selector.asString ++ "Msg").asSymbol;
 		args.pairsDo { |key, value|
 			var map = controls[key];
 			value = value.asControlInput;
 			if(map.notNil) {
-				map.keysValuesDo { |ctlname, set|
-					set.do { |object|
-						if(object !== this) {
-							bundle.add(object.perform(selector, ctlname, value))
-						} {
-							node.do { |n|
-								bundle.add(n.perform(selector, ctlname, value))
-							};
-						}
-					}
-				}
+				doMap.(map, key, value);
 			} {
-				// fallback, just try at the head
-				node.do { |n|
-					bundle.add(n.perform(selector, key, value))
+				this.addControl(this, key, key.asString.split($/).drop(-1));
+				map = controls[key];
+				if(map.notNil) {
+					doMap.(map, key, value);
+				} {
+					// fallback, just try at the head
+					node.do { |n|
+						bundle.add(n.perform(selector, key, value))
+					};
 				};
 			}
 		};
@@ -444,23 +454,22 @@ Syn {
 		^nodes
 	}
 
-	addControls { |bundle|
-		var desc, msg, io;
+	// maybe this isn't needed?
+	getSynthDesc { |bundle|
+		var msg, io;
 		case
 		{ source.isSymbol or: { source.isString } } {
-			desc = SynthDescLib.at(source.asSymbol);
+			synthDesc = SynthDescLib.at(source.asSymbol);
 		}
 		{ source.isFunction } {
 			msg = bundle.preparationMessages.last;
 			if(msg[0] == \d_recv) {
-				desc = SynthDesc.readFile(CollStream(msg[1])).choose;
+				synthDesc = SynthDesc.readFile(CollStream(msg[1])).choose;
 			}
 		};
-		if(desc.notNil) {
-			desc.controls.do { |cn|
-				this.addControl(this, cn.name, Array.new);
-			};
-		};  // else don't touch the user's rate / numChannels
+	}
+	controlNames {
+		^if(synthDesc.notNil) { synthDesc.controlNames }
 	}
 
 	// name/subname --> a specific plug
