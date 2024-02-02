@@ -368,7 +368,8 @@ Syn {
 			if(map.notNil) {
 				doMap.(map, key, value);
 			} {
-				this.addControl(this, key, key.asString.split($/).drop(-1));
+				// must start with the root of this tree
+				this.addControl(this, key.asString.split($/).first.asSymbol, Array.new);
 				map = controls[key];
 				if(map.notNil) {
 					doMap.(map, key, value);
