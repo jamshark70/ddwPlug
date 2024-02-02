@@ -1,0 +1,601 @@
+TITLE:: Syn
+summary:: Dynamically patchable Synth alternative
+categories:: Server>Nodes, Server>Abstractions
+related:: Classes/Plug, Classes/Synth
+
+DESCRIPTION::
+
+Syn is like link::Classes/Synth:: in that it instantiates a SynthDef as a synth node in a server.
+
+The argument list to a Synth may assign only numbers, or arrays of numbers, to a control name.
+
+The argument list to a Syn may also include link::Classes/Plug:: objects, which patch signals from other SynthDefs to the synth input automatically.
+
+Syn is designed for polyphony. When a Syn releases, all of its resources (auxiliary synth nodes for input signals, and control or audio buses) are freed up to be reused. Using the code::\syn:: event type (see link::Overviews/Event_types::), an event pattern can play a sequence of Syn objects, where every network of synths is independent.
+
+(JITLib also supports on-the-fly dynamic patching, but its support for polyphony appears to be limited. You can code::copy:: a NodeProxy, but AFAICS this does not copy its connections to other NodeProxies. JITLib's focus is on interaction; Syn's focus is replicable structure.)
+
+
+subsection:: Node structure
+
+A Syn creates a flat list of nodes, arranged in order so that Plugs feeding into inputs come first.
+
+code::
+(
+a = Syn(\default, [
+	freq: Plug {
+		LFSaw.kr(
+			LFTri.kr(0.2).exprange(0.5, 12)
+		).exprange(150, 950)
+	}
+]);
+)
+
+s.queryAllNodes;
+
+NODE TREE Group 0
+   1 group
+      1000 971719531
+      1001 default
+
+a.release;
+::
+
+Node 1000 is created first, using the given code::target:: and code::addAction::. Subsequent nodes are added immediately after the previous one.
+
+code::release::-ing the Syn cascades through all the other objects, freeing them as well.
+
+Buses are allocated and released automatically. In the above example, the Plug function returns one kr channel, and the single kr bus matches the single kr code::freq:: input defined by the default SynthDef.
+
+If you need to use Syn with supernova, make sure to configure the following:
+
+code::
+Syn.useGroup = true;
+::
+
+With this option enabled, each Syn will create its own Group (not ParGroup!) to maintain processing order. Syn Groups may be placed into a ParGroup for parallel processing.
+
+
+subsection:: Events
+
+code::Syn:: defines the following event types:
+
+definitionlist::
+## syn || Analogous to code::\note::, except that it creates a Syn object for each note (including multichannel expansion).
+## synOn || Analogous to code::\on::.
+## synOff || Analogous to code::\off::.
+## synSet || Analogous to code::\set::. (Note that the arguments to set must be specified in an code::args:: array.)
+::
+
+Plugs may be generated dynamically by event keys ending in "Plug" -- see examples below.
+
+
+subsection:: Limitations
+
+Feedback between Plugs is not supported.
+
+While it is supported to define Plugs based on a synthesis function, and Syn will attempt to maintain timing according to latency, a very complex Syn with a large number of function-based Plugs may take too long to prepare. For efficiency, it is recommended to use SynthDefs as much as possible in production settings.
+
+
+
+
+CLASSMETHODS::
+
+METHOD:: new
+Create and perform a new Syn.
+
+ARGUMENT:: source
+A SynthDef name (string or symbol), or a Function, specifying the main output signal.
+
+ARGUMENT:: args
+A Synth-style argument list: code::[name, value, name, value...]::.
+
+ARGUMENT:: target
+The node relative to which this Syn's nodes will be created.
+
+ARGUMENT:: addAction
+One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
+
+ARGUMENT:: latency
+Server messaging latency to specify when the sound should hit the speakers. code::nil:: means "as soon as possible."
+
+ARGUMENT:: style
+
+definitionlist::
+## code::\synth:: || Arrays in 'args' will be treated as in Synth, e.g. code::[freq: [300, 400, 500]]:: will expect the SynthDef to declare a three-element array for code::freq::.
+## code::\event:: || Arrays in 'args' will be treated as in Event: A flat array will multichannel-expand to produce multiple synths; nested arrays are transmitted to arrayed synth inputs.
+## code::\synthgroup:: || Like 'synth', but puts the new nodes into a dedicated group.
+## code::\eventgroup:: || Like 'event', but puts the new nodes into a dedicated group.
+::
+
+returns:: A playing Syn instance.
+
+
+METHOD:: basicNew
+Create a new Syn, but don't perform it.
+
+ARGUMENT:: source
+A SynthDef name (string or symbol), or a Function, specifying the main output signal.
+
+ARGUMENT:: args
+A Synth-style argument list: code::[name, value, name, value...]::.
+
+ARGUMENT:: target
+The node relative to which this Syn's nodes will be created.
+
+ARGUMENT:: addAction
+One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
+
+returns:: An idle Syn instance.
+
+
+METHOD:: useGroup
+If true, each Syn will place its nodes into a dedicated group. If false, nodes go directly into the parent group. Default is false.
+
+PRIVATE:: initClass
+
+
+
+INSTANCEMETHODS::
+
+subsection:: Playing an idle instance
+
+The following methods use link::Classes/OSCBundle:: because preparation messages may be needed.
+
+METHOD:: play
+Generates and sends an OSC bundle for a code::Syn.basicNew::.
+
+ARGUMENT:: latency
+Server messaging latency defining the time when the sound should hit the speakers.
+
+ARGUMENT:: style
+See link::Classes/Syn#*new:: above.
+
+
+METHOD:: prepareToBundle
+Produce an OSCBundle object containing the messages required to perform the object.
+
+ARGUMENT:: style
+See link::Classes/Syn#*new:: above.
+
+ARGUMENT:: bundle
+Optional. An OSCBundle object.
+
+returns:: An OSCBundle.
+
+
+METHOD:: sendBundle
+Given an OSCBundle, perform it at the time specified by code::latency::.
+
+ARGUMENT:: bundle
+An OSCBundle object created by prepareToBundle.
+
+ARGUMENT:: latency
+Server messaging latency defining the time when the sound should hit the speakers.
+
+
+
+subsection:: Control
+
+The following methods use a plain link::Classes/List:: for bundling. 
+
+METHOD:: release
+As in link::Classes/Synth#-release::, send gate-set messages to cause sustaining envelopes to release. When the primary node(s) are removed, Syn will also release auxiliary resources.
+
+ARGUMENT:: latency
+Server messaging latency defining the time to begin the release.
+
+ARGUMENT:: gate
+The gate value to set. Numbers less than -1.0 will trigger a forced release (see link::Classes/EnvGen::).
+
+
+METHOD:: releaseToBundle
+Construct a bundle (List) of all the messages required to release this Syn.
+
+ARGUMENT:: bundle
+A link::Classes/List:: or nil.
+
+ARGUMENT:: gate
+The gate value to set. Numbers less than -1.0 will trigger a forced release (see link::Classes/EnvGen::).
+
+returns:: The bundle, as a List.
+
+
+METHOD:: free
+Send code::/n_free:: messages to hard-stop this Syn.
+
+ARGUMENT:: latency
+Server messaging latency defining the time to free the nodes.
+
+ARGUMENT::  ... why
+Optional. An annotation. Mainly intended for debugging purposes.
+
+
+METHOD:: freeToBundle
+Construct a bundle (List) of all the messages required to hard-stop this Syn.
+
+ARGUMENT:: bundle
+A link::Classes/List:: or nil.
+
+returns:: The bundle, as a List.
+
+
+METHOD:: set
+Set controls in the Syn.
+
+A control input may receive a signal from another synth node. This synth node may itself have control inputs. These may be accessed using a path-style syntax: code::'freq/rate':: would set the rate parameter belonging to the Plug supplying the frequency to the main synth.
+
+code::
+(
+SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
+	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
+}).add;
+)
+
+(
+y = Syn(\default, [
+	freq: Plug(\freqlfo, [rate: 1.7]),
+	amp: 0.05
+]);
+)
+
+// no effect because main synth has no 'rate' input
+y.set(\rate, 4);
+
+// yes, operates on the Plug
+y.set('freq/rate', 22);
+
+y.release;
+::
+
+ARGUMENT::  ... args
+Name-value pairs.
+
+
+METHOD:: setToBundle
+Adds "set" messages into a bundle, for later sending.
+
+ARGUMENT:: bundle
+Optional. A List of OSC messages. If not provided, one will be created for you.
+
+ARGUMENT::  ... args
+Name-value pairs.
+
+returns:: A List of OSC messages.
+
+
+METHOD:: setn
+Set arrayed controls in the Syn.
+
+ARGUMENT::  ... args
+Name-value pairs.
+
+
+METHOD:: setnToBundle
+Adds "setn" messages into a bundle, for later sending.
+
+ARGUMENT:: bundle
+Optional. A List of OSC messages. If not provided, one will be created for you.
+
+ARGUMENT::  ... args
+Name-value pairs.
+
+returns:: A List of OSC messages.
+
+
+subsection:: Ordering
+
+METHOD:: moveToHead
+Behaves like link::Classes/Node#-moveToHead::.
+
+ARGUMENT:: group
+
+
+METHOD:: moveToTail
+Behaves like link::Classes/Node#-moveToTail::.
+
+ARGUMENT:: group
+
+
+METHOD:: moveBefore
+Behaves like link::Classes/Node#-moveBefore::.
+
+ARGUMENT:: aNode
+
+
+METHOD:: moveAfter
+Behaves like link::Classes/Node#-moveAfter::.
+
+ARGUMENT:: aNode
+
+
+subsection:: Parameter getters
+
+METHOD:: source
+The Syn's source. Currently a string or symbol specifies an existing SynthDef, or a Function can create a SynthDef on-the-fly.
+
+METHOD:: args
+The argument list.
+
+METHOD:: target
+The existing node relative to which the Syn was created.
+
+METHOD:: addAction
+One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
+
+METHOD:: server
+The server on which the Syn is running. (Note that this is not specified directly, but derived from code::target::.)
+
+METHOD:: rate
+Calculation rate, either code::\control:: or code::\audio::.
+
+METHOD:: bundleTarget
+Mainly for private use. This method returns an array consisting of either code::[target, addAction]:: or (in "group" style) code::[group, \addToTail]::.
+
+
+
+subsection:: Structure
+
+METHOD:: node
+An array of top-level synth nodes. (It must be an array because code::\event:: playback style can multichannel expand to multiple nodes.)
+
+METHOD:: nodeAt
+Convenient indexing of the node array.
+
+ARGUMENT:: i
+Index.
+
+returns:: A Synth node.
+
+METHOD:: group
+If group-style node ordering has been chosen, this is the Syn's dedicated Group.
+
+METHOD:: antecedents
+An IdentitySet of Plugs feeding into the main synth nodes. (These Plugs may themselves have antecedents -- that is, you can use the antecedents collections to iterate over the entire tree.)
+
+METHOD:: dest
+The owner Syn -- i.e., code::this::.
+
+METHOD:: allNodes
+A LinkedList of all Synth nodes controlled by this Syn.
+
+
+
+private:: addControl, lastPlug, registerNodes, makeSetBundle, didFree, multiChannelExpand, duplicatePlugs, addControls, controls
+
+
+
+EXAMPLES::
+
+code::
+// Syn without Plugs is basically just like Synth
+x = Syn(\default, [freq: rrand(300, 700)]);
+x.release;
+
+// Syn with plug: auto-patching
+x = Syn(\default, [
+	freq: Plug({
+		LFDNoise0.kr(
+			LFSaw.kr(0.2).exprange(2, 10)
+		).exprange(200, 800)
+	})
+]);
+
+x.release;
+
+// Audio patching
+(
+// note, doesn't need to be defined within the Syn
+var freqPlug = Plug({ LFDNoise3.kr(8).exprange(200, 800) });
+
+x = Syn(
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) * 0.1 },
+	[
+		in1: Plug(\default, [freq: freqPlug, pan: -0.5]),
+		in2: Plug(\default, [freq: freqPlug, pan: 0.5])
+	]
+);
+)
+::
+
+
+subsection:: Shared Plugs
+By default, a Plug copies itself before rendering. It's assumed that, wherever a Plug is used, its signal should be unique. Here, the three notes will be modulated by independent random curves.
+
+code::
+// mad cats
+(
+var modPlug = Plug({ LFDNoise3.kr(4) });
+
+x = Syn(\default, [
+	freq: (150 * [3, 4, 5]).collect { |freq|
+		Plug({ |freq, mod, depth = 1.5|
+			freq * (depth ** mod)
+		}, [freq: freq, mod: modPlug])
+	}
+], style: \event);
+)
+
+x.release;
+::
+
+Creating a code::Plug.shared:: will render one signal only for this object, which may be read in multiple places.
+
+code::
+// major triad cats
+(
+var modPlug = Plug.shared({ LFDNoise3.kr(4) });
+
+x = Syn(\default, [
+	freq: (150 * [3, 4, 5]).collect { |freq|
+		Plug({ |freq, mod, depth = 1.5|
+			freq * (depth ** mod)
+		}, [freq: freq, mod: modPlug])
+	}
+], style: \event);
+)
+
+x.release;
+::
+
+
+subsection:: Setting controls
+
+link::Classes/Synth#-set:: is simple because there is a one-to-one relationship between the Synth object and the synth node in the server.
+
+A Syn can represent multiple nodes, so there needs to be a way to address code::set:: messages to specific nodes in the tree. Also, if a control is mapped onto a Plug, setting it will break the connection, and it can be difficult to recover.
+
+Syn uses a path-style syntax to locate controls:
+
+code::
+(
+SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
+	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
+}).add;
+)
+
+(
+x = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+)
+::
+
+This Syn has three nodes, which are effectively nested:
+
+list::
+## \default synth
+   list::
+   ## amp: 0.05
+   ## freq: \freqlfo Plug
+      list::
+      ## rate: \freqlfo Plug
+         list::
+         ## rate: 0.7
+         ## low: 1
+         ## high: 70
+         ::
+      ::
+   ::
+::
+
+To set the main synth's 'amp' parameter, use code::x.set(\amp, 0.1)::.
+
+To set the frequency range of the Plug controlling 'freq': code::x.set("freq/low", 500, "freq/high", 1200)::. (Note that there is no leading slash.)
+
+To set the innermost Plug, continue adding to the path: code::"freq/rate/rate"::, code::"freq/rate/low":: etc.
+
+What if you try code::x.set(\freq, 300)::? "freq" is mapped to a Plug. Setting it to a fixed value would break the modulation. Instead, Syn will try to push the freq set down to a lower level Plug, if possible. In this case, the Plug synth has no 'freq' input, so nothing will happen. If it did have a 'freq' input, then it would be set at the second level.
+
+There is a reason for this:
+
+subsection:: Three-point modulation
+
+In three-point modulation, there are three values to consider:
+
+definitionlist::
+## base || The parameter's value without modulation.
+## source || The modulator signal. Commonly an LFO or envelope.
+## depth || AKA width: how far to deviate from the base.
+::
+
+code::
+(
+SynthDef(\modLin, { |out, base, mod, depth|
+	Out.kr(out, base + (depth * mod));
+}).add;
+
+SynthDef(\modExp, { |out, base, mod, depth|
+	Out.kr(out, base * (depth ** mod));
+}).add;
+
+SynthDef(\lfTri, { |out, rate = 1|
+	Out.kr(out, LFTri.kr(rate));
+}).add;
+)
+
+(
+x = Syn(\default, [
+	freq: Plug(\modExp, [
+		base: 400,
+		mod: Plug(\lfTri),
+		depth: 1.7
+	])
+]);
+)
+
+x.set("freq/base", 700);
+
+x.release;
+::
+
+For Event use, however, it is inconvenient to set the base frequency as code::"freq/base"::. Events expect to address frequency as code::"freq"::. This is why .set will pass values down into the Plug tree. Plug's code::map:: parameter can change the control name to which passed-down values are sent.
+
+code::
+(
+x = Syn(\default, [
+	freq: Plug(\modExp, [
+		base: 400,
+		mod: Plug(\lfTri),
+		depth: 1.7
+	], map: (freq: \base))
+]);
+)
+
+// affects base, does not break modulation!
+x.set("freq", 700);
+
+// narrower, faster modulation
+x.set("freq/depth", 1.05, "freq/mod/rate", 6);
+
+p = Pbind(
+	\type, \synSet, \syn, x,
+	\args, [\freq],
+	\degree, Pwhite(-7, 7, inf),
+	\dur, 0.25
+).play;
+
+p.stop; x.release;
+::
+
+subsection:: Events and "xxxPlug" keys
+
+In the previous example, you have direct control over the Syn's structure. An Event creates Syn objects for you. This poses a problem: How to specify a parameter's baseline value using normal pattern calculations, and apply Plug modulation to it?
+
+The code::\syn:: and code::\synOn:: event types look for event values ending in Plug:
+
+code::
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\dur, Pwhite(1, 5, inf) * 0.25,
+	\legato, 0.98,
+	// frequency stuff
+	\degree, Pwhite(-7, 7, inf),
+	\freqPlug, { |freq|  // <-- base value gets patched here
+		// lazy: I'll just use an ad-hoc function
+		Plug({ |freq, depth|
+			(depth ** LFTri.kr(4)) * freq
+		}, [
+			freq: freq,
+			depth: Plug({
+				EnvGen.kr(Env([1, 1.06], [0.7], 4))
+			})
+		])
+	}
+).play;
+)
+
+p.stop;
+::
+
+code::\degree:: will control the default SynthDef's code::freq:: input, to which a "freqPlug" may be applied. This is given as a function to be evaluated per event. The function argument comes from the event being processed (see link::Classes/Function#-valueEnvir::). In this function, you can create a Plug with any structure you want. Here, the frequency is passed in an arg list, and modulated in the standard way.
+
+(Note: Pmono and PmonoArtic are not yet supported.)
