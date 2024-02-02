@@ -1,0 +1,8 @@
+(
+	name:		"ddwPlug",
+	path:		"ddwPlug",
+	summary:		"Dynamic synth patching",
+	author:		"James Harkins",
+	version:		0.1,
+	schelp:		"Syn",
+)
