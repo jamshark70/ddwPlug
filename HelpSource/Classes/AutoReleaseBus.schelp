@@ -1,0 +1,58 @@
+TITLE:: AutoReleaseBus
+summary:: A bus that frees itself only when associated objects have been freed
+categories:: Server>Abstractions
+related:: Classes/Syn, Classes/Plug
+
+DESCRIPTION::
+In many cases, a Bus may need to be maintained as long as multiple objects are using it. AutoReleaseBus maintains an IdentitySet of "clients." When another object is using this bus, it should add itself as a client. When it no longer needs the bus, it should remove itself. When all clients are removed, the bus will free itself.
+
+If the AutoReleaseBus is added as a dependent (code::addDependant::), then the client object can broadcast code::theObject.changed(\didFree):: and the AutoReleaseBus will remove the client.
+
+
+CLASSMETHODS::
+
+Use link::Classes/Bus#*audio:: and link::Classes/Bus#*control:: to create instances.
+
+INSTANCEMETHODS::
+
+METHOD:: addClient
+Add a client object.
+
+ARGUMENT:: client
+Some object using the bus.
+
+
+METHOD:: removeClient
+Remove the client object, and automatically free the bus if all clients have been removed.
+
+ARGUMENT:: client
+Some object using the bus.
+
+
+METHOD:: free
+Forced "free," disregarding existing clients.
+
+ARGUMENT::  ... why
+An optional annotation, to be broadcast to any dependents.
+
+
+private:: update
+
+
+EXAMPLES::
+
+code::
+s.boot;
+
+b = AutoReleaseBus.audio(s, 2);
+
+x = Synth(\default, [out: b]);
+b.addClient(x);
+x.onFree { b.removeClient(x) };
+
+b  // has a bus number
+
+x.free;
+
+b  // bus index is now 'nil'
+::

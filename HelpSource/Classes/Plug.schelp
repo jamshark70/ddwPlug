@@ -1,0 +1,201 @@
+TITLE:: Plug
+summary:: A signal argument for Syn
+categories:: Server>Nodes, Server>Abstractions
+related:: Classes/Syn, Classes/Synth
+
+DESCRIPTION::
+
+code::Plug:: must be used in a link::Classes/Syn:: argument list. It represents a signal that will be initiated synchronously with the Syn's primary nodes, and connected to a Syn or Plug using a server bus.
+
+A Plug's signal comes either from a SynthDef (identified by name) or a Function. The Plug also defines an argument list. This may itself contain Plugs, forming a tree structure.
+
+Syn is designed for polyphony. Accordingly, everywhere that a Plug appears in an argument list will produce its own unique signal. This is done by copying the Plug at the moment of rendering it into the server messages. This means you cannot manipulate a Plug object by reference to the original. You will need to access the actual, performing Plug using link::Classes/Syn#-argAt:: or link::Classes/Plug#-argAt::. link::#*shared:: will suppress the copy so that a single Plug can route its signal to multiple inputs.
+
+See link::Classes/Syn:: for usage details.
+
+subsection:: Plugs based on Functions
+
+A Function needs to be converted into a SynthDef before playing it. This is an asynchronous operation.
+
+If the Syn is played with messaging latency (see link::Guides/ServerTiming.html::), the Plug will prepare the SynthDef immediately, wait for completion (link::Classes/Server#-sync::), and then adjust the messaging latency so that the audio begins on time. In this case, if latency is too short, or there are too many Functions to prepare, the final bundle may be late. For performance, it is recommended to use prepared SynthDefs whenever practical.
+
+If it's played without latency, it will still code::server.sync::, and the audio will be produced as soon as possible after that. Timing accuracy will be lost (but not any worse than link::Classes/Function#-play::).
+
+subsection:: Todo:
+
+list::
+## Currently it is not supported to change a Plug's source on the fly.
+::
+
+
+CLASSMETHODS::
+
+METHOD:: new
+Create a new Plug instance.
+
+ARGUMENT:: source
+A Symbol (SynthDef name) or Function, defining the signal's source.
+
+ARGUMENT:: args
+A Synth-style argument list (which may itself contain Plugs).
+
+ARGUMENT:: rate
+Optional. In general, you should not need to specify this; Plug will attempt to determine the rate from the Function or SynthDef. (This assumes that the SynthDef has been added by link::Classes/SynthDef#-add::.)
+
+ARGUMENT:: numChannels
+Optional. In general, you should not need to specify this; Plug will attempt to determine the number of channels from the Function or SynthDef.
+
+ARGUMENT:: map
+Optional. See link::Classes/Syn.html#Three-point%20modulation:: for details.
+
+returns:: A new Plug instance.
+
+
+METHOD:: shared
+Create a new Plug instance, which is marked to avoid copying itself.
+
+ARGUMENT:: source
+A Symbol (SynthDef name) or Function, defining the signal's source.
+
+ARGUMENT:: args
+A Synth-style argument list (which may itself contain Plugs).
+
+ARGUMENT:: rate
+Optional. In general, you should not need to specify this; Plug will attempt to determine the rate from the Function or SynthDef. (This assumes that the SynthDef has been added by link::Classes/SynthDef#-add::.)
+
+ARGUMENT:: numChannels
+Optional. In general, you should not need to specify this; Plug will attempt to determine the number of channels from the Function or SynthDef.
+
+ARGUMENT:: map
+Optional. See link::Classes/Syn.html#Three-point%20modulation:: for details.
+
+returns:: A new Plug instance.
+
+
+INSTANCEMETHODS::
+
+subsection:: Control
+
+Note that in general, users should interact with the owner Syn object, and not call these methods directly.
+
+METHOD:: set
+Change the Plug's input values.
+
+ARGUMENT::  ... args
+A Synth-style argument list.
+
+METHOD:: setMsg
+Produce an OSC message to set the input values.
+
+ARGUMENT::  ... args
+A Synth-style argument list.
+
+returns:: An OSC message (array).
+
+METHOD:: setn
+Change the Plug's input values.
+
+ARGUMENT::  ... args
+A Synth-style argument list.
+
+METHOD:: setMsg
+Produce an OSC message to link::Classes/Node#-setn:: the input values.
+
+ARGUMENT::  ... args
+A Synth-style argument list.
+
+returns:: An OSC message (array).
+
+
+METHOD:: free
+Destroy this Plug, and release resources.
+
+ARGUMENT:: latency
+Messaging latency in seconds.
+
+
+
+
+subsection:: Properties
+
+METHOD:: bus
+If the Plug is active, return the bus that has been allocated.
+
+METHOD:: group
+Returns the owner Syn's target group.
+
+METHOD:: node
+Returns the Synth node producing the Plug's signal.
+
+METHOD:: isConcrete
+If true, this Plug represents a concrete signal. If false, it only defines an expected behavior (and will be copied at render time).
+
+METHOD:: rate
+Returns code::\audio:: or code::\control::.
+
+
+METHOD:: numChannels
+Returns the number of channels for this Plug.
+
+METHOD:: source
+Get the Plug's source.
+
+METHOD:: concreteArgs
+Returns the actual argument list being used. Plugs in the original argument list may have been copied. This array will contain the copies.
+
+METHOD:: controlNames
+Array of symbols, listing the synth's control input names.
+
+METHOD:: map
+Get the dictionary mapping parent-level control names onto a different control name belonging to this Plug. See link::Classes/Syn.html#Three-point%20modulation:: for details.
+
+METHOD:: dest
+Returns the top-level Syn object.
+
+METHOD:: argAt
+Access the object from the argument list corresponding to the named input.
+
+ARGUMENT:: key
+An input name belonging to the Plug synth.
+
+returns:: A value from the argument list.
+
+
+
+subsection:: Structure
+
+METHOD:: antecedents
+An IdentitySet of Plugs feeding directly into this Plug.
+
+code::antecedents:: and code::descendents:: can be used to iterate over the tree structure.
+
+METHOD:: descendants
+An IdentitySet of Plugs receiving this Plug's signal.
+
+
+METHOD:: asControlInput
+Returns the Plug's bus mapping string(s).
+
+METHOD:: asMap
+Returns the Plug's bus mapping string(s).
+
+METHOD:: nodeAt
+Provided for compatibility with Syn's interface. For Plug, only code::x.nodeAt(0):: is meaningful.
+
+ARGUMENT:: i
+Array index.
+
+returns:: A Synth node.
+
+METHOD:: concreteInstance
+Make the concrete, performing instance (unique signal) -- basically "copy."
+
+
+
+private:: canMakePlug, update, initArgLookup, init, findOutputChannel, asPluggable,  prConcrete, printOn
+
+
+
+EXAMPLES::
+
+See link::Classes/Syn#examples::.
