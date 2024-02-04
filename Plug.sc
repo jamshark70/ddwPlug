@@ -303,9 +303,7 @@ Syn {
 		// question for later: this is now basically just like Plug
 		// so do we even need a top-level object?
 
-		controls = IdentityDictionary.new.proto_(
-			IdentityDictionary[\path -> []]
-		);
+		controls = IdentityDictionary.new;
 
 		if(#[event, eventgroup].includes(style)) {
 			argList = this.multiChannelExpand(args);
@@ -313,7 +311,6 @@ Syn {
 			argList = [args];
 		};
 		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle, controls) };
-		this.initArgLookup(concreteArgs);
 
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
@@ -527,7 +524,10 @@ Syn {
 			argLookup.put(keys[0], values);
 		};
 	}
-	argAt { |key| ^argLookup[key] }
+	argAt { |key|
+		if(argLookup.isNil) { this.initArgLookup(concreteArgs) };
+		^argLookup[key]
+	}
 
 	server { ^target.server }
 	dest { ^this }
