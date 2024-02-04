@@ -864,3 +864,127 @@ x = Syn(\default, [
 x.release;
 
 x.allNodes
+
+
+// benchmarking
+(
+var args = [freq: 440, amp: 0.1, pan: 0, ffreq: 2000, rq: 0.7];
+
+a = Array.fill(10, {
+	bench { 100000.do { Synth(\default, args) } }
+});
+
+[a.mean, a.median]
+)
+
+time to run: 0.579086725 seconds.
+time to run: 0.54932334600001 seconds.
+time to run: 0.550036088 seconds.
+time to run: 0.54964802800001 seconds.
+time to run: 0.54928513199999 seconds.
+time to run: 0.55017210699999 seconds.
+time to run: 0.547464076 seconds.
+time to run: 0.54532069499999 seconds.
+time to run: 0.55396658200002 seconds.
+time to run: 0.55111055899999 seconds.
+-> [0.5525413338, 0.549842058]
+
+
+// the bottleneck is registerNodes
+// benchmarking can't handle this well
+// because normal use assumes that nodes will end
+// at which point the node watchers are removed
+// here they just accumulate
+(
+var args = [freq: 440, amp: 0.1, pan: 0, ffreq: 2000, rq: 0.7];
+
+a = Array.geom(5, 1, 10).collect { |num|
+	bench { num.do { Syn(\default, args) } }
+};
+
+// [a.mean, a.median]
+)
+
+time to run: 0.00037673000002769 seconds.
+time to run: 0.0012627129999601 seconds.
+time to run: 0.0058510110000043 seconds.
+time to run: 0.160144753 seconds.
+time to run: 13.804390943 seconds.
+-> [0.00037673000002769, 0.0012627129999601, 0.0058510110000043, 0.160144753, 13.804390943]
+
+
+// if I comment out the registerNodes call,
+// bundle construction is roughly linear
+(
+var args = [freq: 440, amp: 0.1, pan: 0, ffreq: 2000, rq: 0.7];
+var x;
+
+a = Array.geom(5, 1, 10).collect { |num|
+	bench { num.do {
+		x = Syn.basicNew(\default, args);
+		x.prepareToBundle(\synth);
+	} }
+};
+
+// [a.mean, a.median]
+)
+
+time to run: 6.6754000044966e-05 seconds.
+time to run: 0.00033927399999811 seconds.
+time to run: 0.0036413149999817 seconds.
+time to run: 0.013295040999992 seconds.
+time to run: 0.11373358100002 seconds.
+-> [6.6754000044966e-05, 0.00033927399999811, 0.0036413149999817, 0.013295040999992, 0.11373358100002]
+
+
+
+// nrt?
+(
+var add = { |score, time, prep, msgs|
+	prep.do { |msg| a.add([time, msg]) };
+	msgs.do { |msg| a.add([time, msg]) };
+};
+
+z = Server(\nrt, options: ServerOptions.new.numOutputBusChannels_(2).sampleRate_(44100));
+
+a = Score.new;
+
+protect {
+	a.add([0, ['/d_recv', SynthDescLib.at(\default).def.asBytes]]);
+
+	x = Syn.basicNew(\default, [
+		freq: Plug { XLine.kr(1000, 400, 0.1) }
+	], z.defaultGroup);
+	b = OSCBundle.new;
+	x.prepareToBundle(\synth, b);
+	add.(a, 0, b.preparationMessages, b.messages);
+
+	y = Syn.basicNew(\default, [
+		freq: Plug { XLine.kr(2000, 600, 0.1) }
+	], z.defaultGroup);
+	b = OSCBundle.new;
+	y.prepareToBundle(\synth, b);
+	add.(a, 1, b.preparationMessages, b.messages);
+
+	b = List.new;
+	x.releaseToBundle(b);
+	add.(a, 2, b);
+
+	// 0.3 sec later, synth is gone
+	b = x.cleanupToBundle;
+	add.(a, 2.3, b);
+
+	b = List.new;
+	y.releaseToBundle(b);
+	add.(a, 3, b);
+
+	// 0.3 sec later, synth is gone
+	b = y.cleanupToBundle;
+	add.(a, 3.3, b);
+} { z.remove };
+)
+
+a.score.do(_.postln); ""
+
+a.recordNRT(outputFilePath: "~/syn-nrt-test.wav".standardizePath, action: { "done".postln });
+
