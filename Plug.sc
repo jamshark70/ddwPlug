@@ -311,6 +311,7 @@ Syn {
 			argList = [args];
 		};
 		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle, controls) };
+		// this.initArgLookup(concreteArgs);
 
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
@@ -554,10 +555,13 @@ Syn {
 		if(group.notNil) {
 			bundle.add([11, group.nodeID])
 		} {
-			bundle.add([error: -1]);
-			node.do { |n| bundle.add(n.freeMsg) };
-			bundle.add([error: -2])
+			if(node.notNil) {
+				bundle.add([error: -1]);
+				node.do { |n| bundle.add(n.freeMsg) };
+				bundle.add([error: -2])
+			}
 		};
+		group = node = nil;
 		^bundle
 	}
 
@@ -572,6 +576,16 @@ Syn {
 
 	didFree { |... why|
 		this.changed(\didFree, *why);
+	}
+
+	// assumes already freed
+	// for NRT, this just cascades through the tree and deletes buses, nodes etc.
+	cleanup {
+		this.changed(\didFree, \cleanup);
+	}
+	// bit of a dodge perhaps but...
+	cleanupToBundle { |bundle(List.new)|
+		^this.server.makeBundle(false, { this.cleanup }, bundle);
 	}
 
 	multiChannelExpand { |args|
