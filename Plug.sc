@@ -134,7 +134,6 @@ Plug {
 					*dest.bundleTarget
 				);
 				dest.lastPlug = this;  // only set if this time made a node
-				this.initArgLookup(concreteArgs);
 			};
 
 			// these are all Sets so multiple adds are OK (no redundancy)
@@ -247,7 +246,12 @@ Plug {
 			argLookup.put(keys[0], values);
 		};
 	}
-	argAt { |key| ^argLookup[key] }
+	argAt { |key|
+		if(argLookup.isNil) {
+			this.initArgLookup(concreteArgs);
+		};
+		^argLookup[key]
+	}
 	controlNames {
 		^if(synthDesc.notNil) { synthDesc.controlNames }
 	}
