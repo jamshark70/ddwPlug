@@ -107,16 +107,16 @@ Plug {
 		// nodes.do { |node| node.removeDependant(this) };
 	}
 
-	asPluggable { |argDest, downstream, bundle, controlDict|
+	asPluggable { |argDest, downstream, bundle|
 		if(isConcrete) {
-			// [argDest, downstream, bundle, controlDict.proto, controlDict].debug("Plug:asPluggable");
+			// [argDest, downstream, bundle].debug("Plug:asPluggable");
 			dest = argDest;
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
 				// only one synth per plug, for now
 				// array wrapper is for consistency with 'preparePlug...' methods
-				concreteArgs = [args.asOSCPlugArray(dest, this, bundle, controlDict)];
+				concreteArgs = [args.asOSCPlugArray(dest, this, bundle)];
 				// preparation messages, bundle messages
 				// preparePlugSource gives one node per concreteArgs entry
 				node = source.preparePlugSource(this, bundle, concreteArgs)
@@ -130,7 +130,6 @@ Plug {
 					this,
 					bundle,
 					concreteArgs.collect(_.asOSCArgArray),
-					controlDict,
 					*dest.bundleTarget
 				);
 				dest.lastPlug = this;  // only set if this time made a node
@@ -142,7 +141,7 @@ Plug {
 			downstream.addDependant(this);
 			downstream.addDependant(bus);
 		} {
-			^this.concreteInstance.asPluggable(argDest, downstream, bundle, controlDict);
+			^this.concreteInstance.asPluggable(argDest, downstream, bundle);
 		}
 	}
 
@@ -314,7 +313,7 @@ Syn {
 		} {
 			argList = [args];
 		};
-		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle, controls) };
+		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle) };
 		// this.initArgLookup(concreteArgs);
 
 		// maybe need to refactor this
@@ -322,7 +321,7 @@ Syn {
 		node = source.preparePlugSource(this, bundle, argList);
 		this.getSynthDesc(bundle);
 		source.preparePlugBundle(
-			this, bundle, concreteArgs.collect(_.asOSCArgArray), controls,
+			this, bundle, concreteArgs.collect(_.asOSCArgArray),
 			*this.bundleTarget
 		);
 

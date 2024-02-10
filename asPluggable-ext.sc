@@ -1,17 +1,17 @@
 /* gplv3 hjh */
 
 + SequenceableCollection {
-	asOSCPlugArray { |dest, downstream, bundle, controlDict|
+	asOSCPlugArray { |dest, downstream, bundle|
 		var array = Array(100);		// allocate a bunch of space
 		this.do { |e|
-			array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict);
+			array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle);
 		};
 		^array
 	}
 
-	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
+	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle|
 		array = array.add($[);
-		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle, controlDict) };
+		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle) };
 		^array.add($])
 	}
 }
@@ -19,35 +19,35 @@
 + Object {
 	asPluggable { ^this.asControlInput }
 
-	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle, controlDict|
-		^array.add(this.asPluggable(dest, downstream, bundle, controlDict))
+	asOSCPlugEmbeddedArray { |array, dest, downstream, bundle|
+		^array.add(this.asPluggable(dest, downstream, bundle))
 	}
-	asOSCPlugArray { |dest, downstream, bundle, controlDict|
-		^this.asPluggable(dest, downstream, bundle, controlDict)
+	asOSCPlugArray { |dest, downstream, bundle|
+		^this.asPluggable(dest, downstream, bundle)
 	}
-	// asOSCPlugBundle { |dest| ^this.asPluggable(dest, controlDict) }
+	// asOSCPlugBundle { |dest| ^this.asPluggable(dest) }
 	canMakePlug { ^false }
 }
 
 // do we really want to do this?
 + Function {
-	asPluggable { |dest, downstream, bundle, controlDict|
+	asPluggable { |dest, downstream, bundle|
 		// e.g.
 		// Syn(\something, [input: { |freq| Plug(\lfo, [basefreq: freq]) }])
-		^this.valueEnvir.asPluggable(dest, downstream, bundle, controlDict)
+		^this.valueEnvir.asPluggable(dest, downstream, bundle)
 	}
 }
 
 + Ref {
-	asPluggable { |dest, downstream, bundle, controlDict|
-		^this.dereference.valueEnvir.asPluggable(dest, downstream, bundle, controlDict)
+	asPluggable { |dest, downstream, bundle|
+		^this.dereference.valueEnvir.asPluggable(dest, downstream, bundle)
 	}
 	canMakePlug { ^value.canMakePlug }
 }
 
 // should not be polyphonic? NodeProxies don't auto-spawn
 + NodeProxy {
-	asPluggable { |dest, downstream, controlDict|
+	asPluggable { |dest, downstream|
 	}
 }
 
@@ -82,7 +82,7 @@
 	preparePlugSource { |dest, bundle, argList|
 		^Array.fill(argList.size, { Synth.basicNew(this, dest.server) });
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
+	preparePlugBundle { |dest, bundle, args, target, action|
 		args.do { |argList, i|
 			bundle.add(dest.nodeAt(i).newMsg(target /*dest.group*/, argList, action /*\addToTail*/));
 		};
@@ -94,8 +94,8 @@
 	preparePlugSource { |dest, bundle, argList|
 		^this.asString.preparePlugSource(dest, bundle, argList);
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
-		^this.asString.preparePlugBundle(dest, bundle, args, controlDict, target, action);
+	preparePlugBundle { |dest, bundle, args, target, action|
+		^this.asString.preparePlugBundle(dest, bundle, args, target, action);
 	}
 }
 
@@ -108,7 +108,7 @@
 		SynthDefTracker.register(dest, def.name);
 		^Array.fill(argList.size, { Synth.basicNew(def.name, dest.server) });
 	}
-	preparePlugBundle { |dest, bundle, args, controlDict, target, action|
+	preparePlugBundle { |dest, bundle, args, target, action|
 		var nodes = IdentitySet.new;
 		args.do { |argList, i|
 			nodes.add(dest.nodeAt(i).nodeID);
