@@ -68,6 +68,7 @@ Plug {
 	var <bus;  // use AutoReleaseBus
 	var <concreteArgs, argLookup;
 	var <antecedents, <descendants;
+	var <predecessor;
 	var <isConcrete = false;
 	var synthDesc;
 
@@ -132,6 +133,7 @@ Plug {
 					concreteArgs.collect(_.asOSCArgArray),
 					*dest.bundleTarget
 				);
+				predecessor = dest.lastPlug;
 				dest.lastPlug = this;  // only set if this time made a node
 			};
 
@@ -156,10 +158,32 @@ Plug {
 		node.setn(*args);
 	}
 	setMsg { |... args|
+		this.updateArgs(args);
 		^node.setMsg(*args);
 	}
 	setnMsg { |... args|
+		this.updateArgs(args);
 		^node.setnMsg(*args);
+	}
+	updateArgs { |setArgs/*, cArgs*/|
+		var i;
+		setArgs.pairsDo { |key, value, j|
+			if(argLookup.notNil) {
+				argLookup[key] = [value];
+			};
+			i = args.indexOf(key);
+			if(i.notNil) {
+				args[i + 1] = value;
+				concreteArgs[0][i + 1] = args[j + 1];  // change later
+			} {
+				args = args.add(key).add(value);
+				// problem: concreteArgs also adds out, i_out
+				// so a new entry here won't match index
+				// maybe use insert?
+				i = concreteArgs[0].size - 4;
+				concreteArgs[0] = concreteArgs[0].insert(i, args[j + 1]).insert(i, key);  // change later
+			};
+		}
 	}
 
 	findOutputChannel { |bundle|
@@ -348,8 +372,9 @@ Syn {
 		};
 	}
 
-	makeSetBundle { |selector(\set), bundle(List.new) ... args|
+	makeSetBundle { |selector(\set), bundle(List.new) ... argList|
 		var doMap = { |map, key, value|
+			var i;
 			map.keysValuesDo { |ctlname, set|
 				set.do { |object|
 					if(object !== this) {
@@ -358,12 +383,23 @@ Syn {
 						node.do { |n|
 							bundle.add(n.perform(selector, ctlname, value))
 						};
-					}
+					};
+					// Plug 'set' gets updated in the plug object, not here
+					// concrete args later
+					// btw this should be true only once b/c a Set can't have dupes
+					if(object === this) {
+						i = args.indexOf(ctlname);
+						if(i.notNil) {
+							args[i + 1] = value
+						} {
+							args = args.add(ctlname).add(value);
+						};
+					};
 				}
-			}
+			};
 		};
 		selector = (selector.asString ++ "Msg").asSymbol;
-		args.pairsDo { |key, value|
+		argList.pairsDo { |key, value|
 			var map;
 			key = key.asSymbol;
 			map = controls[key];
