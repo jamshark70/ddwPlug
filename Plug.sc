@@ -124,7 +124,7 @@ Plug {
 				.at(0);  // one synth for now
 				// bundle is a sneaky way to extract a Function's def
 				// though probably inadequate for some future requirement
-				this.findOutputChannel(bundle);
+				this.findOutputChannel(bundle, source);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 				concreteArgs[0] = concreteArgs[0] ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
@@ -181,18 +181,48 @@ Plug {
 				// so a new entry here won't match index
 				// maybe use insert?
 				i = concreteArgs[0].size - 4;
-				concreteArgs[0] = concreteArgs[0].insert(i, args[j + 1]).insert(i, key);  // change later
+				concreteArgs[0] = concreteArgs[0].insert(i, value).insert(i, key);  // change later
 			};
 		}
 	}
 
-	findOutputChannel { |bundle|
+	setSourceToBundle { |src, bundle(OSCBundle.new)|
+		var oldNode = node, oldDesc = synthDesc;
+		var target, addAction;
+		node = src.preparePlugSource(this, bundle, concreteArgs)
+		.at(0);
+		if(predecessor.notNil) {
+			target = predecessor.node;  // must be a Plug, only one node
+			addAction = \addAfter;
+		} {
+			// if this has no predecessor, then it's the first Plug
+			// so the referent is the plug's old node
+			target = oldNode;
+			addAction = \addBefore;
+		};
+		src.preparePlugBundle(this, bundle, concreteArgs, target, addAction);
+		// btw this call overwrites properties, which is not really good
+		this.findOutputChannel(bundle, src);
+		if(oldDesc.notNil and: { oldDesc.hasGate }) {
+			bundle.add(oldNode.releaseMsg)
+		} {
+			bundle.add(oldNode.freeMsg)
+		};
+		source = src;
+		^bundle
+	}
+	source_ { |src, latency|
+		var bundle = this.setSourceToBundle(src);
+		bundle.sendOnTime(this.server, latency);
+	}
+
+	findOutputChannel { |bundle, src|
 		var desc, msg, io;
 		case
-		{ source.isSymbol or: { source.isString } } {
+		{ src.isSymbol or: { src.isString } } {
 			desc = SynthDescLib.at(source.asSymbol);
 		}
-		{ source.isFunction } {
+		{ src.isFunction } {
 			// oops, must communicate def back to here
 			// I'm gonna try something naughty though
 			// this is being called immediately after preparePlugSource
