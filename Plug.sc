@@ -399,11 +399,21 @@ Syn {
 						// Plug 'set' gets updated in the plug object, not here
 						// concrete args later
 						// btw this should be true only once b/c a Set can't have dupes
+						if(argLookup.notNil) {
+							argLookup[ctlname] = value;
+						};
 						i = args.indexOf(ctlname);
 						if(i.notNil) {
 							args[i + 1] = value
 						} {
 							args = args.add(ctlname).add(value);
+						};
+						i = concreteArgs.indexOf(ctlname);
+						if(i.notNil) {
+							concreteArgs[i + 1] = value
+						} {
+							// Syn doesn't add 'out' and 'i_out'
+							concreteArgs = concreteArgs.add(ctlname).add(value);
 						};
 					};
 				}

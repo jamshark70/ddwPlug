@@ -1067,4 +1067,10 @@ x.argAtPath("freq/freq");
 x.set('freq', 500);
 x.argAtPath("freq/freq");
 
+x.argAtPath("amp")
+x.set('amp', 0.05);
+x.argAtPath("amp")
+
+x.concreteArgs
+
 x.release;
