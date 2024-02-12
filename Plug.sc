@@ -90,12 +90,13 @@ Plug {
 	}
 
 	free { |latency|
+		this.freeToBundle.sendOnTime(this.server, latency)
+	}
+	freeToBundle { |bundle(OSCBundle.new)|
 		if(node.notNil) {
-			node.server.sendBundle(latency,
-				[\error, -1],
-				node.freeMsg,
-				[\error, -2]
-			);
+			bundle.add([\error, -1])
+			.add(node.freeMsg)
+			.add([\error, -2]);
 			bus.removeClient(this);
 			bus = node = nil;
 		};
@@ -106,6 +107,7 @@ Plug {
 		antecedents.do { |plug| plug.descendants.remove(this) };
 		descendants.do { |plug| plug.antecedents.remove(this) };
 		// nodes.do { |node| node.removeDependant(this) };
+		^bundle
 	}
 
 	asPluggable { |argDest, downstream, bundle|
@@ -405,7 +407,7 @@ Syn {
 			concreteArgs = concreteArgs.add(key).add(value);
 		};
 	}
-	makeSetBundle { |selector(\set), bundle(List.new) ... argList|
+	makeSetBundle { |selector(\set), bundle(OSCBundle.new) ... argList|
 		var doMap = { |map, key, value|
 			var i;
 			map.keysValuesDo { |ctlname, set|
@@ -459,17 +461,17 @@ Syn {
 		};
 		^bundle
 	}
-	setToBundle { |bundle(List.new) ... args|
+	setToBundle { |bundle(OSCBundle.new) ... args|
 		^this.makeSetBundle(\set, bundle, *args)
 	}
-	setnToBundle { |bundle(List.new) ... args|
+	setnToBundle { |bundle(OSCBundle.new) ... args|
 		^this.makeSetBundle(\setn, bundle, *args)
 	}
 	set { |... args|
-		this.server.sendBundle(nil, *this.setToBundle(nil, *args))
+		this.setToBundle(nil, *args).sendOnTime(this.server, nil)
 	}
 	setn { |... args|
-		this.server.sendBundle(nil, *this.setnToBundle(nil, *args))
+		this.setnToBundle(nil, *args).sendOnTime(this.server, nil)
 	}
 
 	moveToHead { |group|
@@ -641,11 +643,11 @@ Syn {
 	rate { ^\audio }
 
 	free { |latency ... why|
-		this.server.sendBundle(latency, *this.freeToBundle);
+		this.freeToBundle.sendOnTime(this.server, latency);
 		this.didFree(*why);
 	}
 
-	freeToBundle { |bundle(List.new)|
+	freeToBundle { |bundle(OSCBundle.new)|
 		if(group.notNil) {
 			bundle.add([11, group.nodeID])
 		} {
@@ -660,10 +662,10 @@ Syn {
 	}
 
 	release { |latency, gate = 0|
-		this.server.sendBundle(latency, *this.releaseToBundle(nil, gate));
+		this.releaseToBundle(nil, gate).sendOnTime(this.server, latency)
 	}
 
-	releaseToBundle { |bundle(List.new), gate = 0|
+	releaseToBundle { |bundle(OSCBundle.new), gate = 0|
 		bundle = bundle.add([15, node.nodeID, \gate, gate]);
 		^bundle
 	}
@@ -678,7 +680,7 @@ Syn {
 		this.changed(\didFree, \cleanup);
 	}
 	// bit of a dodge perhaps but...
-	cleanupToBundle { |bundle(List.new)|
+	cleanupToBundle { |bundle(OSCBundle.new)|
 		^this.server.makeBundle(false, { this.cleanup }, bundle);
 	}
 

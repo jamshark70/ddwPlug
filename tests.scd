@@ -1040,6 +1040,23 @@ x.set('freq', 500);
 x.release;
 
 
+(
+x = Syn(\default, [
+	freq: Plug({ |base|
+		base * (1.1 ** LFTri.kr(3))
+	}, [base: 400], map: (freq: \base))
+]);
+)
+
+x.set('freq', 500);
+
+x.argAtPath('freq/base')
+x.argAtPath('freq/freq')
+
+x.release;
+
+
+
 // problem for 'set-to-plug': freq is already mapped to the sub-level plug
 // also, if there's no freq/freq (or mapped), then there's no entry
 // so the 'set' gets skipped totally
@@ -1072,5 +1089,6 @@ x.set('amp', 0.05);
 x.argAtPath("amp")
 
 x.concreteArgs
+x.args
 
 x.release;
