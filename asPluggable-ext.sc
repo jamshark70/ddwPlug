@@ -1,5 +1,7 @@
 /* gplv3 hjh */
 
+// remove nodeAt
+
 + SequenceableCollection {
 	asOSCPlugArray { |dest, downstream, bundle|
 		var array = Array(100);		// allocate a bunch of space
@@ -80,12 +82,10 @@
 // sources
 + String {
 	preparePlugSource { |dest, bundle, argList|
-		^Array.fill(argList.size, { Synth.basicNew(this, dest.server) });
+		^Synth.basicNew(this, dest.server)
 	}
 	preparePlugBundle { |dest, bundle, args, target, action|
-		args.do { |argList, i|
-			bundle.add(dest.nodeAt(i).newMsg(target /*dest.group*/, argList, action /*\addToTail*/));
-		};
+		bundle.add(dest.node.newMsg(target /*dest.group*/, args, action /*\addToTail*/));
 		^dest.node
 	}
 }
@@ -106,27 +106,22 @@
 		var node;
 		bundle.addPrepare([\d_recv, def.asBytes]);
 		SynthDefTracker.register(dest, def.name);
-		^Array.fill(argList.size, { Synth.basicNew(def.name, dest.server) });
+		^Synth.basicNew(def.name, dest.server)
 	}
 	preparePlugBundle { |dest, bundle, args, target, action|
-		var nodes = IdentitySet.new;
-		args.do { |argList, i|
-			nodes.add(dest.nodeAt(i).nodeID);
-			bundle.add(dest.nodeAt(i).newMsg(
-				target /*dest.group*/,
-				argList,
-				action /*\addToTail*/
-			));
-		};
-		dest.node.do { |node|
-			OSCFunc({ |msg|
-				nodes.remove(msg[1]);
-				if(nodes.isEmpty) {
-					SynthDefTracker.release(dest, node.defName);
-				};
-			}, '/n_end', dest.server.addr, argTemplate: [node.nodeID])
-			.fix.oneShot;
-		};
+		var myID = dest.node.nodeID;
+		var myDefName = dest.node.defName;
+		bundle.add(dest.node.newMsg(
+			target /*dest.group*/,
+			args,
+			action /*\addToTail*/
+		));
+		OSCFunc({ |msg|
+			if(myID == msg[1]) {
+				SynthDefTracker.release(dest, myDefName);
+			};
+		}, '/n_end', dest.server.addr, argTemplate: [dest.node.nodeID])
+		.fix.oneShot;
 		^dest.node
 	}
 	canMakePlug { ^true }

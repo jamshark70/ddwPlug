@@ -117,20 +117,19 @@ Plug {
 			if(bus.isNil) {
 				// only one synth per plug, for now
 				// array wrapper is for consistency with 'preparePlug...' methods
-				concreteArgs = [args.asOSCPlugArray(dest, this, bundle)];
+				concreteArgs = args.asOSCPlugArray(dest, this, bundle);
 				// preparation messages, bundle messages
 				// preparePlugSource gives one node per concreteArgs entry
-				node = source.preparePlugSource(this, bundle, concreteArgs)
-				.at(0);  // one synth for now
+				node = source.preparePlugSource(this, bundle, concreteArgs);
 				// bundle is a sneaky way to extract a Function's def
 				// though probably inadequate for some future requirement
 				this.findOutputChannel(bundle, source);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
-				concreteArgs[0] = concreteArgs[0] ++ [out: bus, i_out: bus];
+				concreteArgs = concreteArgs ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
 					this,
 					bundle,
-					concreteArgs.collect(_.asOSCArgArray),
+					concreteArgs.asOSCArgArray,
 					*dest.bundleTarget
 				);
 				predecessor = dest.lastPlug;
@@ -147,7 +146,6 @@ Plug {
 		}
 	}
 
-	nodeAt { |i| ^node }  // just the one
 	server { ^dest.server }
 	group { ^dest.group }
 
@@ -174,14 +172,14 @@ Plug {
 			i = args.indexOf(key);
 			if(i.notNil) {
 				args[i + 1] = value;
-				concreteArgs[0][i + 1] = args[j + 1];  // change later
+				concreteArgs[i + 1] = args[j + 1];  // change later
 			} {
 				args = args.add(key).add(value);
 				// problem: concreteArgs also adds out, i_out
 				// so a new entry here won't match index
 				// maybe use insert?
-				i = concreteArgs[0].size - 4;
-				concreteArgs[0] = concreteArgs[0].insert(i, value).insert(i, key);  // change later
+				i = concreteArgs.size - 4;
+				concreteArgs = concreteArgs.insert(i, value).insert(i, key);  // change later
 			};
 		}
 	}
@@ -189,8 +187,7 @@ Plug {
 	setSourceToBundle { |src, bundle(OSCBundle.new)|
 		var oldNode = node, oldDesc = synthDesc;
 		var target, addAction;
-		node = src.preparePlugSource(this, bundle, concreteArgs)
-		.at(0);
+		node = src.preparePlugSource(this, bundle, concreteArgs);
 		if(predecessor.notNil) {
 			target = predecessor.node;  // must be a Plug, only one node
 			addAction = \addAfter;
@@ -294,9 +291,9 @@ Plug {
 
 	initArgLookup { |args|
 		argLookup = IdentityDictionary.new;
-		args.flop.pairsDo { |keys, values|
+		args.pairsDo { |key, value|
 			// keys is an array but all elements should be the same
-			argLookup.put(keys[0], values);
+			argLookup.put(key, value);
 		};
 	}
 	argAt { |key|
@@ -325,32 +322,30 @@ Syn {
 	classvar <>useGroup = false;
 
 	var <>source, <>args, <>target, <>addAction;
-	var <node, <group, watcher, nodeIDs;
+	var <node, <group, watcher;
 	var <concreteArgs, argLookup;
 	var <antecedents;
 	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 	var <synthDesc;
 
-	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency, style(\synth)|
-		^super.newCopyArgs(source, args, target, addAction).play(latency, style);
+	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency|
+		^super.newCopyArgs(source, args, target, addAction).play(latency);
 	}
 
 	*basicNew { |source, args, target(Server.default.defaultGroup), addAction(\addToTail)|
 		^super.newCopyArgs(source, args, target, addAction)
 	}
 
-	play { |latency, style|
-		var bundle = this.prepareToBundle(style);
+	play { |latency|
+		var bundle = this.prepareToBundle;
 		this.sendBundle(bundle, latency);
 	}
 
-	prepareToBundle { |style, bundle(OSCBundle.new)|
-		var argList;
-
+	prepareToBundle { |bundle(OSCBundle.new)|
 		if(antecedents.isNil) { antecedents = IdentitySet.new };
 
-		if(useGroup or: { #[synthgroup, eventgroup].includes(style) }) {
+		if(useGroup) {
 			group = Group.basicNew(target.server);  // note, children can get this from 'dest'
 			bundle.add(group.newMsg(target, addAction));
 		};
@@ -362,20 +357,14 @@ Syn {
 
 		controls = IdentityDictionary.new;
 
-		if(#[event, eventgroup].includes(style)) {
-			argList = this.multiChannelExpand(args);
-		} {
-			argList = [args];
-		};
-		concreteArgs = argList.collect { |a| a.asOSCPlugArray(this, this, bundle) };
-		// this.initArgLookup(concreteArgs);
+		concreteArgs = args.asOSCPlugArray(this, this, bundle);
 
 		// maybe need to refactor this
 		// all types of sources should flatten to a 'defName'?
-		node = source.preparePlugSource(this, bundle, argList);
+		node = source.preparePlugSource(this, bundle, concreteArgs);
 		this.getSynthDesc(bundle);
 		source.preparePlugBundle(
-			this, bundle, concreteArgs.collect(_.asOSCArgArray),
+			this, bundle, concreteArgs.asOSCArgArray,
 			*this.bundleTarget
 		);
 
@@ -388,18 +377,14 @@ Syn {
 	}
 
 	registerNodes {
-		nodeIDs = IdentitySet.new;
-		watcher = node.collect { |n|
-			nodeIDs.add(n.nodeID);
-			OSCFunc({ |msg|
-				nodeIDs.remove(msg[1]);
-				if(nodeIDs.isEmpty) {
-					this.free(nil, \nodeEnded);  // that simple?
-				};
-			}, '/n_end', target.server.addr, argTemplate: [n.nodeID])
-			// needs to survive cmd-.
-			.fix.oneShot;
-		};
+		watcher = OSCFunc({ |msg|
+			// node may have changed, if you hot-swapped the source
+			if(node.notNil and: { node.nodeID == msg[1] }) {
+				this.free(nil, \nodeEnded);  // that simple?
+			};
+		}, '/n_end', target.server.addr, argTemplate: [node.nodeID])
+		// needs to survive cmd-.
+		.fix.oneShot;
 	}
 
 	makeSetBundle { |selector(\set), bundle(List.new) ... argList|
@@ -410,14 +395,10 @@ Syn {
 					if(object !== this) {
 						bundle.add(object.perform(selector, ctlname, value))
 					} {
-						node.do { |n|
-							bundle.add(n.perform(selector, ctlname, value))
-						};
-					};
-					// Plug 'set' gets updated in the plug object, not here
-					// concrete args later
-					// btw this should be true only once b/c a Set can't have dupes
-					if(object === this) {
+						bundle.add(node.perform(selector, ctlname, value));
+						// Plug 'set' gets updated in the plug object, not here
+						// concrete args later
+						// btw this should be true only once b/c a Set can't have dupes
 						i = args.indexOf(ctlname);
 						if(i.notNil) {
 							args[i + 1] = value
@@ -517,11 +498,10 @@ Syn {
 			};
 		};
 		traverse.(antecedents);
-		node.do { |n| nodes.add(n) };
+		nodes.add(node);
 		^nodes
 	}
 
-	// maybe this isn't needed?
 	getSynthDesc { |bundle|
 		var msg, io;
 		case
@@ -560,8 +540,9 @@ Syn {
 		a = object.argAt(name);
 		// have: this object, cname, path
 		// want: child plug and mapped cname
-		if(a.notNil and: { a[0].isKindOf(Plug) }) {
-			a.do { |child|  // this loop is always top-level
+		if(a.isKindOf(Plug)) {
+			// function is only to support inline vars
+			{ |child|  // this loop is always top-level
 				var obj = child, obj2;
 				var mapKey = name;
 				var cnames;
@@ -573,25 +554,24 @@ Syn {
 						this.addControl(obj, cn, path ++ [name.asString]);
 					};
 					obj2 = obj.argAt(mapKey);
-					obj2.notNil and: { obj2[0].isKindOf(Plug) }
+					obj2.isKindOf(Plug)
 				} {
-					obj = obj2[0];
+					obj = obj2;
 				};
 
 				cnames = obj.controlNames;
 				if(cnames.isNil or: { cnames.includes(mapKey) }) {
 					addTo.(controls[key], mapKey, obj);
 				};
-			};
+			}.value(a);
 		} {
 			addTo.(controls[key], name, object);
 		};
 	}
 	initArgLookup { |args|
 		argLookup = IdentityDictionary.new;
-		args.flop.pairsDo { |keys, values|
-			// keys is an array but all elements should be the same
-			argLookup.put(keys[0], values);
+		args.pairsDo { |key, value|
+			argLookup.put(key, value);
 		};
 	}
 	argAt { |key|
@@ -601,7 +581,6 @@ Syn {
 
 	server { ^target.server }
 	dest { ^this }
-	nodeAt { |i| ^node[i] }
 	bundleTarget {
 		^case
 		{ group.notNil } {
@@ -625,9 +604,9 @@ Syn {
 			bundle.add([11, group.nodeID])
 		} {
 			if(node.notNil) {
-				bundle.add([error: -1]);
-				node.do { |n| bundle.add(n.freeMsg) };
-				bundle.add([error: -2])
+				bundle.add([error: -1])
+				.add(node.freeMsg)
+				.add([error: -2])
 			}
 		};
 		group = node = nil;
@@ -639,7 +618,7 @@ Syn {
 	}
 
 	releaseToBundle { |bundle(List.new), gate = 0|
-		bundle = bundle.addAll([15, node.collect(_.nodeID), \gate, gate].flop);
+		bundle = bundle.add([15, node.nodeID, \gate, gate]);
 		^bundle
 	}
 
@@ -721,7 +700,7 @@ Syn {
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
 					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
-					oscBundles.add(n.prepareToBundle(\event));
+					oscBundles.add(n.prepareToBundle);
 					n.registerNodes  // returns n
 				};
 
@@ -745,14 +724,14 @@ Syn {
 							sustain + offset,
 							server,
 							[15 /* \n_set */,
-								~syn.collect { |n| n.node[0].nodeID },
+								~syn.collect { |n| n.node.nodeID },
 								\gate, 0
 							].flop,
 							~latency
 						);
 					}
 				} {
-					ids = ~syn.collect { |syn| syn.node[0].nodeID };
+					ids = ~syn.collect { |syn| syn.node.nodeID };
 					if (strum < 0) {
 						oscBundles = oscBundles.reverse;
 						ids = ids.reverse;
@@ -830,7 +809,7 @@ Syn {
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
 					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
-					oscBundles.add(n.prepareToBundle(\event));
+					oscBundles.add(n.prepareToBundle);
 					n.registerNodes  // returns n
 				};
 				{

@@ -38,7 +38,6 @@ o.sendOnTime(s, 0.2);
 
 // simple Syn
 x = Syn(\default, [freq: 400]);
-y = x.play;
 
 x.release;
 
@@ -159,7 +158,7 @@ x.argAt(\in1)
 s.audioBusAllocator.debug
 
 
-// multichannel expansion
+// multichannel expansion -- cancelled
 (
 x = Syn(\default, [
 	freq: (3..5).collect { |i|
@@ -465,17 +464,15 @@ x = Syn(\default, [
 	),
 	amp: 0.05
 ]);
-
-y = x.play;
 )
 
-y.moveAfter(h);  // 501 1001 1002 1003 500 ok!
-y.moveToTail(s.defaultGroup);  // ok!
+x.moveAfter(h);  // 501 1001 1002 1003 500 ok!
+x.moveToTail(s.defaultGroup);  // ok!
 
-y.moveBefore(g);
-y.moveToHead(h);
+x.moveBefore(g);
+x.moveToHead(h);
 
-y.release;
+x.release;
 
 // allNodes should test shared
 
@@ -831,7 +828,7 @@ x = Syn(\default, [
 x.release;
 
 
-
+// no, cancelled
 (
 var modPlug = Plug({ LFDNoise3.kr(4) });
 
@@ -956,14 +953,14 @@ protect {
 		freq: Plug { XLine.kr(1000, 400, 0.1) }
 	], z.defaultGroup);
 	b = OSCBundle.new;
-	x.prepareToBundle(\synth, b);
+	x.prepareToBundle(b);
 	add.(a, 0, b.preparationMessages, b.messages);
 
 	y = Syn.basicNew(\default, [
 		freq: Plug { XLine.kr(2000, 600, 0.1) }
 	], z.defaultGroup);
 	b = OSCBundle.new;
-	y.prepareToBundle(\synth, b);
+	y.prepareToBundle(b);
 	add.(a, 1, b.preparationMessages, b.messages);
 
 	b = List.new;
@@ -988,3 +985,34 @@ a.score.do(_.postln); ""
 
 a.recordNRT(outputFilePath: "~/syn-nrt-test.wav".standardizePath, action: { "done".postln });
 
+
+// access args
+(
+x = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+)
+
+// ok, only args given at this level
+x.argAt('freq')
+x.slotAt(\argLookup)
+
+x.argAt('freq').argAt('rate')
+x.argAt('freq').concreteArgs
+x.slotAt(\argLookup)
+
+// more array stuff lurking here
+x.set('freq/rate/rate', 3)
+
+x.controls.keysValuesDo { |key, value| [key, value].postln }; ""
+
+x.release;
+
+
+// retest 'set' with xxxPlug
