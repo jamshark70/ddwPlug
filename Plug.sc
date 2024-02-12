@@ -387,6 +387,24 @@ Syn {
 		.fix.oneShot;
 	}
 
+	updateOneArg { |key, value|
+		var i;
+		if(argLookup.notNil) {
+			argLookup[key] = value;
+		};
+		i = args.indexOf(key);
+		if(i.notNil) {
+			args[i + 1] = value;
+		} {
+			args = args.add(key).add(value);
+		};
+		i = concreteArgs.indexOf(key);
+		if(i.notNil) {
+			concreteArgs[i + 1] = value;  // change later
+		} {
+			concreteArgs = concreteArgs.add(key).add(value);
+		};
+	}
 	makeSetBundle { |selector(\set), bundle(List.new) ... argList|
 		var doMap = { |map, key, value|
 			var i;
@@ -394,45 +412,48 @@ Syn {
 				set.do { |object|
 					if(object !== this) {
 						bundle.add(object.perform(selector, ctlname, value))
+						// Plug 'set' gets updated in the plug object, not here
+						// so I don't need an updateArgs
 					} {
 						bundle.add(node.perform(selector, ctlname, value));
-						// Plug 'set' gets updated in the plug object, not here
-						// concrete args later
 						// btw this should be true only once b/c a Set can't have dupes
-						if(argLookup.notNil) {
-							argLookup[ctlname] = value;
-						};
-						i = args.indexOf(ctlname);
-						if(i.notNil) {
-							args[i + 1] = value
-						} {
-							args = args.add(ctlname).add(value);
-						};
-						i = concreteArgs.indexOf(ctlname);
-						if(i.notNil) {
-							concreteArgs[i + 1] = value
-						} {
-							// Syn doesn't add 'out' and 'i_out'
-							concreteArgs = concreteArgs.add(ctlname).add(value);
-						};
+						this.updateOneArg(ctlname, value);
+					};
+				}
+			};
+		};
+		var doMapPlug = { |map, key, value|
+			var i;
+			map.keysValuesDo { |ctlname, set|
+				set.do { |object|
+					if(object !== this) {
+
+					} {
+
+						this.updateOneArg(ctlname, value);
 					};
 				}
 			};
 		};
 		selector = (selector.asString ++ "Msg").asSymbol;
 		argList.pairsDo { |key, value|
-			var map;
+			var map, func;
 			key = key.asSymbol;
 			map = controls[key];
-			value = value.asControlInput;
+			if(value.isKindOf(Plug).not) {
+				value = value.asControlInput;
+				func = doMap
+			} {
+				func = doMapPlug
+			};
 			if(map.notNil) {
-				doMap.(map, key, value);
+				func.(map, key, value);
 			} {
 				// must start with the root of this tree
 				this.addControl(this, key.asString.split($/).first.asSymbol, Array.new);
 				map = controls[key];
 				if(map.notNil) {
-					doMap.(map, key, value);
+					func.(map, key, value);
 				};
 			}
 		};
