@@ -1016,3 +1016,55 @@ x.release;
 
 
 // retest 'set' with xxxPlug
+// multiple function layers is a bit awkward, add sugar later
+e = (type: \synOn, freq: 300, freqPlug: { |freq| Plug({ |freq| freq * (1.1 ** LFTri.kr(3)) }, [freq: freq]) }).play;
+
+e.putAll((type: \synSet, args: ['freq'], freq: 400)).play;
+
+e.putAll((type: \synSet, args: ['freq'], freq: 500)).play;
+
+e.put(\type, \synOff).play;
+
+e[\syn][0].controls.keysValuesDo { |key, value| [key, value].postln }; ""
+
+(
+x = Syn(\default, [
+	freq: Plug({ |freq|
+		freq * (1.1 ** LFTri.kr(3))
+	}, [freq: 400])
+]);
+)
+
+x.set('freq', 500);
+
+x.release;
+
+
+// problem for 'set-to-plug': freq is already mapped to the sub-level plug
+// also, if there's no freq/freq (or mapped), then there's no entry
+// so the 'set' gets skipped totally
+
+
+
+// also retest hot-swapping source
+(
+x = Syn(\default, [
+	freq: Plug({ |freq|
+		freq * (1.1 ** LFTri.kr(3))
+	}, [freq: 400])
+]);
+)
+
+// easier without the array nonsense
+// need to reintroduce argAtPath
+x.argAt(\freq).source = { |freq| freq * (2.2 ** LFSaw.kr(12)) };
+
+x.argAtPath("freq");
+x.argAtPath("freq/freq");
+x.argAtPath("freq/freq/empty");
+
+x.argAtPath("freq/freq");
+x.set('freq', 500);
+x.argAtPath("freq/freq");
+
+x.release;

@@ -167,7 +167,7 @@ Plug {
 		var i;
 		setArgs.pairsDo { |key, value, j|
 			if(argLookup.notNil) {
-				argLookup[key] = [value];
+				argLookup[key] = value;
 			};
 			i = args.indexOf(key);
 			if(i.notNil) {
@@ -577,6 +577,21 @@ Syn {
 	argAt { |key|
 		if(argLookup.isNil) { this.initArgLookup(concreteArgs) };
 		^argLookup[key]
+	}
+	argAtPath { |path|
+		var obj = this;
+		var key, value;
+		path = Pseq(path.asString.split($/).collect(_.asSymbol), 1).asStream;
+		while {
+			key = path.next;
+			key.notNil and: {
+				value = obj.tryPerform(\argAt, key);
+				if(value.isNil) { ^nil } { true }
+			}
+		} {
+			obj = value;
+		};
+		^obj
 	}
 
 	server { ^target.server }
