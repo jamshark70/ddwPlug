@@ -1108,9 +1108,15 @@ s.controlBusAllocator.debug;
 
 x.set(\freq, Plug { |base = 400| (LFSaw.kr(0.2, mul: 0.7) + LFPulse.kr(12, mul: 0.3)).exprange(base * 2, base * 0.5) }, \amp, 0.5);
 
+x.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+x.set('freq/base', 600);
+
 x.argAt(\freq);
 
-x.set('freq/base', Plug { LFDNoise3.kr(0.8).exprange(300, 3000) });
+x.set('freq/base', Plug { |low = 300, high = 3000| LFDNoise3.kr(0.8).exprange(low, high) });
+
+x.set('freq/base/low', 100, 'freq/base/high', 500);
 
 x.objectForPath('freq/base').dump
 

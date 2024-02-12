@@ -452,6 +452,10 @@ Syn {
 				};
 				new = obj.setPlugToBundle(ctlname, value, bundle);
 				obj.updateOneArg(ctlname, new);
+				// 'controls' map tree for this root object
+				// may have changed; for now, just delete it
+				// (it will be rebuilt on demand when needed)
+				this.invalidateControl(key);
 			};
 		};
 		selector = (selector.asString ++ "Msg").asSymbol;
@@ -623,6 +627,16 @@ Syn {
 		} {
 			addTo.(controls[key], name, object);
 		};
+	}
+	invalidateControl { |path|
+		path = path.asString;
+		if(controls.notNil) {
+			controls.keysDo { |key|
+				if(key.asString.beginsWith(path)) {
+					controls.removeAt(key)
+				}
+			}
+		}
 	}
 	initArgLookup { |args|
 		argLookup = IdentityDictionary.new;
