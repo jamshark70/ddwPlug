@@ -75,6 +75,12 @@
 			});
 		}
 	}
+
+	debug { |str|
+		Post << str << ":\n";
+		preparationMessages.do { |msg| "prep: %\n".postf(msg) };
+		messages.do { |msg| "msg: %\n".postf(msg) };
+	}
 }
 
 

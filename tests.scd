@@ -1092,3 +1092,28 @@ x.concreteArgs
 x.args
 
 x.release;
+
+
+
+// set-to-plug
+x = Syn(\default);
+
+x.set(\freq, Plug { LFSaw.kr(12).exprange(200, 800) });
+
+x.set(\freq, Plug { (LFSaw.kr(0.2, mul: 0.7) + LFPulse.kr(12, mul: 0.3)).exprange(800, 200) });
+
+x.set(\amp, 0.5);
+
+s.controlBusAllocator.debug;
+
+x.set(\freq, Plug { |base = 400| (LFSaw.kr(0.2, mul: 0.7) + LFPulse.kr(12, mul: 0.3)).exprange(base * 2, base * 0.5) }, \amp, 0.5);
+
+x.argAt(\freq);
+
+x.set('freq/base', Plug { LFDNoise3.kr(0.8).exprange(300, 3000) });
+
+x.objectForPath('freq/base').dump
+
+x.free;
+
+s.controlBusAllocator.debug;  // all stale bus refs go away! yes!

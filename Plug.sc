@@ -112,7 +112,6 @@ Plug {
 
 	asPluggable { |argDest, downstream, bundle|
 		if(isConcrete) {
-			// [argDest, downstream, bundle].debug("Plug:asPluggable");
 			dest = argDest;
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
@@ -132,7 +131,7 @@ Plug {
 					this,
 					bundle,
 					concreteArgs.asOSCArgArray,
-					*dest.bundleTarget
+					*dest.bundleTarget(predecessor, downstream)
 				);
 				predecessor = dest.lastPlug;
 				dest.lastPlug = this;  // only set if this time made a node
@@ -165,24 +164,29 @@ Plug {
 		this.updateArgs(args);
 		^node.setnMsg(*args);
 	}
-	updateArgs { |setArgs/*, cArgs*/|
+	updateOneArg { |key, value|
 		var i;
-		setArgs.pairsDo { |key, value, j|
-			if(argLookup.notNil) {
-				argLookup[key] = value;
-			};
-			i = args.indexOf(key);
-			if(i.notNil) {
-				args[i + 1] = value;
-				concreteArgs[i + 1] = args[j + 1];  // change later
-			} {
-				args = args.add(key).add(value);
-				// problem: concreteArgs also adds out, i_out
-				// so a new entry here won't match index
-				// maybe use insert?
-				i = concreteArgs.size - 4;
-				concreteArgs = concreteArgs.insert(i, value).insert(i, key);  // change later
-			};
+		if(argLookup.notNil) {
+			argLookup[key] = value;
+		};
+		i = args.tryPerform(\indexOf, key);
+		if(i.notNil) {
+			args[i + 1] = value;
+		} {
+			args = args.add(key).add(value);
+		};
+		i = concreteArgs.tryPerform(\indexOf, key);
+		if(i.notNil) {
+			concreteArgs[i + 1] = value;
+		} {
+			i = concreteArgs.size - 4;
+			concreteArgs = concreteArgs.insert(i, value).insert(i, key);
+		};
+	}
+	updateArgs { |setArgs|
+		var i;
+		setArgs.pairsDo { |key, value|
+			this.updateOneArg(key, value)
 		}
 	}
 
@@ -213,6 +217,13 @@ Plug {
 	source_ { |src, latency|
 		var bundle = this.setSourceToBundle(src);
 		bundle.sendOnTime(this.server, latency);
+	}
+
+	setPlugToBundle { |key, plug, bundle(OSCBundle.new)|
+		var new = plug.asPluggable(dest, this, bundle);
+		this.updateArgs([key, new]);
+		bundle.add(node.setMsg(key, new.asMap));
+		^new
 	}
 
 	findOutputChannel { |bundle, src|
@@ -394,13 +405,13 @@ Syn {
 		if(argLookup.notNil) {
 			argLookup[key] = value;
 		};
-		i = args.indexOf(key);
+		i = args.tryPerform(\indexOf, key);
 		if(i.notNil) {
 			args[i + 1] = value;
 		} {
 			args = args.add(key).add(value);
 		};
-		i = concreteArgs.indexOf(key);
+		i = concreteArgs.tryPerform(\indexOf, key);
 		if(i.notNil) {
 			concreteArgs[i + 1] = value;  // change later
 		} {
@@ -412,8 +423,13 @@ Syn {
 			var i;
 			map.keysValuesDo { |ctlname, set|
 				set.do { |object|
+					var old;
+					old = object.argAt(ctlname);
+					if(old.isKindOf(Plug)) {
+						old.freeToBundle(bundle);
+					};
 					if(object !== this) {
-						bundle.add(object.perform(selector, ctlname, value))
+						bundle.add(object.perform(selector, ctlname, value));
 						// Plug 'set' gets updated in the plug object, not here
 						// so I don't need an updateArgs
 					} {
@@ -424,40 +440,40 @@ Syn {
 				}
 			};
 		};
-		var doMapPlug = { |map, key, value|
-			var i;
-			map.keysValuesDo { |ctlname, set|
-				set.do { |object|
-					if(object !== this) {
-
-					} {
-
-						this.updateOneArg(ctlname, value);
-					};
-				}
+		var doMapPlug = { |key, value|
+			var obj = this.objectForPath(key);
+			var ctlname;
+			var old, new;
+			if(obj.notNil) {
+				ctlname = key.asString.split($/).last.asSymbol;
+				old = obj.argAt(ctlname);
+				if(old.isKindOf(Plug)) {
+					old.freeToBundle(bundle);
+				};
+				new = obj.setPlugToBundle(ctlname, value, bundle);
+				obj.updateOneArg(ctlname, new);
 			};
 		};
 		selector = (selector.asString ++ "Msg").asSymbol;
 		argList.pairsDo { |key, value|
-			var map, func;
+			var map;
 			key = key.asSymbol;
 			map = controls[key];
 			if(value.isKindOf(Plug).not) {
 				value = value.asControlInput;
-				func = doMap
-			} {
-				func = doMapPlug
-			};
-			if(map.notNil) {
-				func.(map, key, value);
-			} {
-				// must start with the root of this tree
-				this.addControl(this, key.asString.split($/).first.asSymbol, Array.new);
-				map = controls[key];
 				if(map.notNil) {
-					func.(map, key, value);
-				};
-			}
+					doMap.(map, key, value);
+				} {
+					// must start with the root of this tree
+					this.addControl(this, key.asString.split($/).first.asSymbol, Array.new);
+					map = controls[key];
+					if(map.notNil) {
+						doMap.(map, key, value);
+					};
+				}
+			} {
+				doMapPlug.(key, value)
+			};
 		};
 		^bundle
 	}
@@ -473,6 +489,13 @@ Syn {
 	setn { |... args|
 		this.setnToBundle(nil, *args).sendOnTime(this.server, nil)
 	}
+
+	// return should be a concrete Plug
+	setPlugToBundle { |key, plug, bundle(OSCBundle.new)|
+		var out = plug.asPluggable(this, this, bundle);
+		bundle.add(node.setMsg(key, out.asMap));
+		^out
+ 	}
 
 	moveToHead { |group|
 		var prev;
@@ -626,11 +649,42 @@ Syn {
 		};
 		^obj
 	}
+	objectForPath { |path|
+		var obj = this;
+		var key, value;
+		// because we need to stop one item early, not reach the actual arg value
+		// the Ref skulduggery is because a Pseq list cannot be empty
+		path = Pseq(
+			path.asString.split($/).collect(_.asSymbol)
+			.drop(-1).add(Ref(\end)),
+			1
+		).asStream;
+		while {
+			key = path.next;
+			if(key.isKindOf(Ref)) { ^obj };
+			key.notNil and: {
+				value = obj.tryPerform(\argAt, key);
+				if(value.isNil) { ^nil } { true }
+			}
+		} {
+			obj = value;
+		};
+		^obj
+	}
 
 	server { ^target.server }
 	dest { ^this }
-	bundleTarget {
+	bundleTarget { |predecessor, downstream|
 		^case
+		// esp. for adding Plugs by '.set'
+		// predecessor would have been set as lastPlug but that may not be valid
+		// but the plug does know its downstream
+		{ downstream.notNil and: { downstream.node.notNil } } {
+			[downstream.node, \addBefore]
+		}
+		{ predecessor.notNil } {
+			[predecessor.node, \addAfter]  // predecessor can only be a Plug, single-node
+		}
 		{ group.notNil } {
 			[group, \addToTail]
 		}
