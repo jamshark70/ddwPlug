@@ -578,7 +578,7 @@ make: { |name|
 			pwidth: Plug({ SinOsc.kr(2.5) * 0.45 + 0.5 })
 		],
 		target: ~target
-	);
+	).debug("voicer");
 	out.mapGlobal(\ffreq, nil, 2500, \freq);
 	out
 },
@@ -863,6 +863,71 @@ x.release;
 x.allNodes
 
 
+(
+x = Syn(\default, [
+	freq: Plug({ |freq|
+		freq * (1.1 ** LFTri.kr(3))
+	}, [freq: 400])
+]);
+)
+
+x.argAtPath("freq");  // a Plug
+
+x.argAtPath("freq").source = { |freq| freq * (2.2 ** LFSaw.kr(12)) };
+
+// forwards to "freq/freq"
+// because setting a number should not accidentally overwrite a Plug
+x.set(\freq, 600);
+
+// control 'freq/freq' itself by a new Plug (didn't exist at first)
+x.set("freq/freq", Plug { LFTri.kr(0.2).exprange(200, 800) });
+
+// now there are 3 synth nodes
+
+// let's overwrite the 'freq' Plug with a different idea
+x.set("freq", Plug { LFDNoise0.kr(LFDNoise3.kr(0.2).exprange(5, 18)).exprange(200, 800) });
+
+// now there are 2 nodes:
+// deleting the 'freq * ...' Plug also deleted its upstream
+
+x.release;
+
+
+(
+// note, doesn't need to be defined within the Syn
+var freqPlug = Plug({ LFDNoise3.kr(8).exprange(200, 800) });
+
+x = Syn(
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) },
+	[
+		in1: Plug(\default, [freq: freqPlug, pan: -0.5]),
+		in2: Plug(\default, [freq: freqPlug, pan: 0.5])
+	]
+);
+)
+
+x.argAtPath("in1/pan");
+-> -0.5
+
+x.release;
+
+
+
+(
+var modPlug = Plug.shared({ LFDNoise3.kr(4) });
+
+x = (150 * [3, 4, 5]).collect { |freq|
+	Syn(\default, [
+		freq: Plug({ |freq, mod, depth = 1.5|
+			freq * (depth ** mod)
+		}, [freq: freq, mod: modPlug])
+	])
+};
+)
+
+x.do(_.release);
+
+
 // benchmarking
 (
 var args = [freq: 440, amp: 0.1, pan: 0, ffreq: 2000, rq: 0.7];
@@ -1123,3 +1188,37 @@ x.objectForPath('freq/base').dump
 x.free;
 
 s.controlBusAllocator.debug;  // all stale bus refs go away! yes!
+
+
+
+
+// get Voicer to *really* work
+(
+t = TimedBundle.new;
+
+t.addPrepare([\d_recv, SynthDef(\test, { |out, gate = 1, freq = 440, amp = 0.1| Out.ar(out, (SinOsc.ar(freq) * (amp * EnvGen.kr(Env.asr, gate, doneAction: 2))).dup) }).asBytes]);
+t.add([0, (x = Synth.basicNew(\test, s)).newMsg]);
+t.add([2, x.setMsg(\gate, 0)]);
+t.sendOnTime(s, 0.2);
+)
+
+s.sendBundle(nil, t.preparationMessages[0][1]);
+(instrument: \test).play;
+
+
+/make(fmMelVC:fmm/melBP:fmm);
+/fmm =>.0 t;
+/fmm = "[1357]";
+
+/fmm+
+/fmm-
+
+/drum.(\tightsnr);
+/tsn = "----";
+/tsn+
+
+/fmm(leadTime = 0.2)
+
+/fmm/tsn-
+
+/fmm = "[1357]::\xpose("(13)(14)(15)")";
