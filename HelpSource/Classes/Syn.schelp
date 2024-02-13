@@ -80,8 +80,6 @@ Some features I would like but haven't finished:
 
 list::
 ## Add Pmono support.
-## Support on-the-fly changes to Plug sources.
-## Allow a Plug-ged synth input to be set to a new Plug on-the-fly.
 ::
 
 
@@ -105,15 +103,6 @@ One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addA
 
 ARGUMENT:: latency
 Server messaging latency to specify when the sound should hit the speakers. code::nil:: means "as soon as possible."
-
-ARGUMENT:: style
-
-definitionlist::
-## code::\synth:: || Arrays in 'args' will be treated as in Synth, e.g. code::[freq: [300, 400, 500]]:: will expect the SynthDef to declare a three-element array for code::freq::.
-## code::\event:: || Arrays in 'args' will be treated as in Event: A flat array will multichannel-expand to produce multiple synths; nested arrays are transmitted to arrayed synth inputs.
-## code::\synthgroup:: || Like 'synth', but puts the new nodes into a dedicated group.
-## code::\eventgroup:: || Like 'event', but puts the new nodes into a dedicated group.
-::
 
 returns:: A playing Syn instance.
 
@@ -155,15 +144,9 @@ Generates and sends an OSC bundle for a code::Syn.basicNew::.
 ARGUMENT:: latency
 Server messaging latency defining the time when the sound should hit the speakers.
 
-ARGUMENT:: style
-See link::Classes/Syn#*new:: above.
-
 
 METHOD:: prepareToBundle
 Produce an OSCBundle object containing the messages required to perform the object.
-
-ARGUMENT:: style
-See link::Classes/Syn#*new:: above.
 
 ARGUMENT:: bundle
 Optional. An OSCBundle object.
@@ -256,7 +239,7 @@ y.release;
 ::
 
 ARGUMENT::  ... args
-Name-value pairs.
+Path-value pairs.
 
 
 METHOD:: setToBundle
@@ -288,6 +271,18 @@ ARGUMENT::  ... args
 Name-value pairs.
 
 returns:: A List of OSC messages.
+
+
+METHOD:: cleanup
+Force the Syn's associated objects to clean themselves up, without actually sending a code::free:: message to the main Syn node. Normally, there is no need to call this method directly; however, code::cleanupToBundle:: is useful for non-real-time rendering.
+
+METHOD:: cleanupToBundle
+Performs a code::cleanup:: operation, and captures all of the OSC messages into an OSCBundle. These messages may then be added into a NRT link::Classes/Score::. See examples.
+
+argument:: bundle
+Optional. An OSCBundle. If omitted, an OSCBundle will be created for you, and returned.
+
+returns:: An OSCBundle containing cleanup messages.
 
 
 subsection:: Ordering
@@ -324,6 +319,49 @@ The Syn's source. Currently a string or symbol specifies an existing SynthDef, o
 METHOD:: args
 The argument list.
 
+METHOD:: argAt
+Access a given argument value only for the top-level Syn. This method does not look into child Plug arguments.
+
+ARGUMENT:: key
+A Symbol identifying the argument to look up.
+
+METHOD:: argAtPath
+Access a given argument value anywhere in the object tree.
+
+ARGUMENT:: path
+A string or symbol locating a parameter, using the same syntax as in link::#-set::.
+
+returns:: An argument value, or Plug object.
+
+code::
+(
+// note, doesn't need to be defined within the Syn
+var freqPlug = Plug({ LFDNoise3.kr(8).exprange(200, 800) });
+
+x = Syn(
+	{ (NamedControl.ar(\in1, [0, 0]) + NamedControl.ar(\in2, [0, 0])) },
+	[
+		in1: Plug(\default, [freq: freqPlug, pan: -0.5]),
+		in2: Plug(\default, [freq: freqPlug, pan: 0.5])
+	]
+);
+)
+
+x.argAtPath("in1/pan");
+-> -0.5
+
+x.release;
+::
+
+METHOD:: objectForPath
+Finds the object to which a plug or other input belongs. Normally you should not need to call this directly. It is used when code::set():: replaces a Plug: the old Plug's owner object is responsible for completing this operation.
+
+ARGUMENT:: path
+A string or symbol locating a parameter, using the same syntax as in link::#-set::.
+
+returns:: The owner object of the given parameter.
+
+
 METHOD:: target
 The existing node relative to which the Syn was created.
 
@@ -344,13 +382,7 @@ Mainly for private use. This method returns an array consisting of either code::
 subsection:: Structure
 
 METHOD:: node
-An array of top-level synth nodes. (It must be an array because code::\event:: playback style can multichannel expand to multiple nodes.)
-
-METHOD:: nodeAt
-Convenient indexing of the node array.
-
-ARGUMENT:: i
-Index.
+The top-level synth node.
 
 returns:: A Synth node.
 
@@ -358,7 +390,7 @@ METHOD:: group
 If group-style node ordering has been chosen, this is the Syn's dedicated Group.
 
 METHOD:: antecedents
-An IdentitySet of Plugs feeding into the main synth nodes. (These Plugs may themselves have antecedents -- that is, you can use the antecedents collections to iterate over the entire tree.)
+An IdentitySet of Plugs feeding into the main synth node. (These Plugs may themselves have antecedents -- that is, you can use the antecedents collections to iterate over the entire tree.)
 
 METHOD:: dest
 The owner Syn -- i.e., code::this::.
@@ -368,7 +400,7 @@ A LinkedList of all Synth nodes controlled by this Syn.
 
 
 
-private:: addControl, lastPlug, registerNodes, makeSetBundle, didFree, multiChannelExpand, duplicatePlugs, addControls, controls
+private:: addControl, lastPlug, registerNodes, makeSetBundle, didFree, multiChannelExpand, duplicatePlugs, addControls, controls, concreteArgs, controlNames, getSynthDesc, initArgLookup, invalidateControl, setPlugToBundle, synthDesc, updateOneArg
 
 
 
@@ -414,16 +446,16 @@ code::
 (
 var modPlug = Plug({ LFDNoise3.kr(4) });
 
-x = Syn(\default, [
-	freq: (150 * [3, 4, 5]).collect { |freq|
-		Plug({ |freq, mod, depth = 1.5|
+x = (150 * [3, 4, 5]).collect { |freq|
+	Syn(\default, [
+		freq: Plug({ |freq, mod, depth = 1.5|
 			freq * (depth ** mod)
 		}, [freq: freq, mod: modPlug])
-	}
-], style: \event);
+	])
+};
 )
 
-x.release;
+x.do(_.release);
 ::
 
 Creating a code::Plug.shared:: will render one signal only for this object, which may be read in multiple places.
@@ -433,16 +465,16 @@ code::
 (
 var modPlug = Plug.shared({ LFDNoise3.kr(4) });
 
-x = Syn(\default, [
-	freq: (150 * [3, 4, 5]).collect { |freq|
-		Plug({ |freq, mod, depth = 1.5|
+x = (150 * [3, 4, 5]).collect { |freq|
+	Syn(\default, [
+		freq: Plug({ |freq, mod, depth = 1.5|
 			freq * (depth ** mod)
 		}, [freq: freq, mod: modPlug])
-	}
-], style: \event);
+	])
+};
 )
 
-x.release;
+x.do(_.release);
 ::
 
 
@@ -606,3 +638,108 @@ p.stop;
 code::\degree:: will control the default SynthDef's code::freq:: input, to which a "freqPlug" may be applied. This is given as a function to be evaluated per event. The function argument comes from the event being processed (see link::Classes/Function#-valueEnvir::). In this function, you can create a Plug with any structure you want. Here, the frequency is passed in an arg list, and modulated in the standard way.
 
 (Note: Pmono and PmonoArtic are not yet supported.)
+
+
+subsection:: NRT (Non-Real-Time)
+
+The NRT interface at this point is not especially convenient, but it is possible to use code::xxxToBundle:: methods to capture OSC messaging, and at the messages one by one into a link::Classes/Score::.
+
+note:: After releasing a Syn, always link::#-cleanupToBundle:: and add the messages after the node's envelope release time. In real time use, this cleanup is performed automatically when the Syn node ends. In NRT, there is no existing node to track. It then becomes your responsibility to know how long your Syn will take to release, and do the cleanup yourself. (If this is not done, then OSCFunc and object dependencies will accumulate, eventually slowing down the sclang interpreter.) ::
+
+code::
+(
+// convenience function to transmit OSCBundle --> Score
+var add = { |score, time, prep, msgs|
+	prep.do { |msg| a.add([time, msg]) };
+	msgs.do { |msg| a.add([time, msg]) };
+};
+
+z = Server(\nrt, options: ServerOptions.new.numOutputBusChannels_(2).sampleRate_(44100));
+
+a = Score.new;
+
+protect {
+	a.add([0, ['/d_recv', SynthDescLib.at(\default).def.asBytes]]);
+
+	x = Syn.basicNew(\default, [
+		freq: Plug { XLine.kr(1000, 400, 0.1) }
+	], z.defaultGroup);
+	b = OSCBundle.new;
+	x.prepareToBundle(b);
+	add.(a, 0, b.preparationMessages, b.messages);
+
+	y = Syn.basicNew(\default, [
+		freq: Plug { XLine.kr(2000, 600, 0.1) }
+	], z.defaultGroup);
+	b = OSCBundle.new;
+	y.prepareToBundle(b);
+	add.(a, 1, b.preparationMessages, b.messages);
+
+	b = OSCBundle.new;
+	x.releaseToBundle(b);
+	add.(a, 2, b.messages);
+
+	// 0.3 sec later, synth is gone
+	b = x.cleanupToBundle;
+	add.(a, 2.3, b.messages);
+
+	b = OSCBundle.new;
+	y.releaseToBundle(b);
+	add.(a, 3, b.messages);
+
+	// 0.3 sec later, synth is gone
+	b = y.cleanupToBundle;
+	add.(a, 3.3, b.messages);
+} { z.remove };
+)
+
+a.score.do(_.postln); ""
+
+a.recordNRT(outputFilePath: "~/syn-nrt-test.wav".standardizePath, action: { "done".postln });
+::
+
+
+subsection:: Repatching
+
+Plugs' sources can be changed on the fly, without disrupting the structure. To do this, access the Plug object using link::#-argAtPath:: and call link::Classes/Plug#-source:: on it.
+
+Alternately, new Plugs may be introduced at any time through the standard link::#-set:: interface. If there was already a Plug in that location, the old Plug and all of its upstream Plugs will be removed.
+
+code::
+(
+x = Syn(\default, [
+	freq: Plug({ |freq|
+		freq * (1.1 ** LFTri.kr(3))
+	}, [freq: 400])
+]);
+)
+
+x.argAtPath("freq");  // a Plug
+
+x.argAtPath("freq").source = { |freq|
+	freq * (2.2 ** LFSaw.kr(12))
+};
+
+// forwards to "freq/freq"
+// because setting a number should not accidentally overwrite a Plug
+x.set(\freq, 600);
+
+// control 'freq/freq' itself by a new Plug (didn't exist at first)
+x.set("freq/freq", Plug {
+	LFTri.kr(0.2).exprange(200, 800)
+});
+
+// now there are 3 synth nodes
+
+// let's overwrite the 'freq' Plug with a different idea
+x.set("freq", Plug {
+	LFDNoise0.kr(
+		LFDNoise3.kr(0.2).exprange(5, 18)
+	).exprange(200, 800)
+});
+
+// now there are 2 nodes:
+// deleting the 'freq * ...' Plug also deleted its upstream
+
+x.release;
+::

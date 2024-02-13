@@ -21,12 +21,6 @@ If the Syn is played with messaging latency (see link::Guides/ServerTiming.html:
 
 If it's played without latency, it will still code::server.sync::, and the audio will be produced as soon as possible after that. Timing accuracy will be lost (but not any worse than link::Classes/Function#-play::).
 
-subsection:: Todo:
-
-list::
-## Currently it is not supported to change a Plug's source on the fly.
-::
-
 
 CLASSMETHODS::
 
@@ -74,6 +68,18 @@ returns:: A new Plug instance.
 
 INSTANCEMETHODS::
 
+subsection:: Repatching the source
+
+METHOD:: source
+Get or set the current Plug source. The current Plug instance will remain in place. Its prior Synth node will be replaced by a new Synth in the same location in the node tree, with the same argument values.
+
+ARGUMENT:: src
+Currently supported sources are: a string or symbol naming a SynthDef, or a function that creates UGens.
+
+ARGUMENT:: latency
+Server messaging latency.
+
+
 subsection:: Control
 
 Note that in general, users should interact with the owner Syn object, and not call these methods directly.
@@ -115,7 +121,6 @@ Messaging latency in seconds.
 
 
 
-
 subsection:: Properties
 
 METHOD:: bus
@@ -137,8 +142,8 @@ Returns code::\audio:: or code::\control::.
 METHOD:: numChannels
 Returns the number of channels for this Plug.
 
-METHOD:: source
-Get the Plug's source.
+METHOD:: server
+Returns the server object where this Plug is running.
 
 METHOD:: concreteArgs
 Returns the actual argument list being used. Plugs in the original argument list may have been copied. This array will contain the copies.
@@ -172,6 +177,8 @@ code::antecedents:: and code::descendents:: can be used to iterate over the tree
 METHOD:: descendants
 An IdentitySet of Plugs receiving this Plug's signal.
 
+METHOD:: predecessor
+Points to the Plug object immediately preceding this one in the server's node tree.
 
 METHOD:: asControlInput
 Returns the Plug's bus mapping string(s).
@@ -179,20 +186,15 @@ Returns the Plug's bus mapping string(s).
 METHOD:: asMap
 Returns the Plug's bus mapping string(s).
 
-METHOD:: nodeAt
-Provided for compatibility with Syn's interface. For Plug, only code::x.nodeAt(0):: is meaningful.
-
-ARGUMENT:: i
-Array index.
-
-returns:: A Synth node.
+METHOD:: node
+Returns the Plug's synth node.
 
 METHOD:: concreteInstance
 Make the concrete, performing instance (unique signal) -- basically "copy."
 
 
 
-private:: canMakePlug, update, initArgLookup, init, findOutputChannel, asPluggable,  prConcrete, printOn
+private:: canMakePlug, update, initArgLookup, init, findOutputChannel, asPluggable,  prConcrete, printOn, args, freeToBundle, setPlugToBundle, setSourceToBundle, setnMsg, updateArgs, updateOneArg
 
 
 
