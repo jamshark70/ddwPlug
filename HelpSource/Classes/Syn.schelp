@@ -107,6 +107,35 @@ Server messaging latency to specify when the sound should hit the speakers. code
 returns:: A playing Syn instance.
 
 
+METHOD:: newByArgPaths
+Like code::*new::, but accepts a list of argument emphasis::paths:: and values applying to the entire Syn-Plug complex.
+
+list::
+## code::Syn.new:: -- each code::args:: list applies only to its owner. Argument values belonging to a Plug must be written into the specific Plug's argument list. This is faster.
+## code::Syn.newByArgPaths:: -- the main Syn argument list can contain arguments for any location in the Syn-Plug tree, using the same path syntax as link::Classes/Syn#-set::. This incurs some processing overhead, since the paths need to be converted into the code::Syn.new:: structure. But this may be more convenient for programmatic generation of argument lists.
+::
+
+See link::#Setting controls:: examples below.
+
+ARGUMENT:: source
+A SynthDef name (string or symbol), or a Function, specifying the main output signal.
+
+ARGUMENT:: args
+A Synth-style argument list, where names may be paths to Plug inputs in the tree: code::[name, value, name, value...]::.
+
+ARGUMENT:: target
+The node relative to which this Syn's nodes will be created.
+
+ARGUMENT:: addAction
+One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
+
+ARGUMENT:: latency
+Server messaging latency to specify when the sound should hit the speakers. code::nil:: means "as soon as possible."
+
+returns:: A playing Syn instance.
+
+
+
 METHOD:: basicNew
 Create a new Syn, but don't perform it.
 
@@ -123,6 +152,26 @@ ARGUMENT:: addAction
 One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
 
 returns:: An idle Syn instance.
+
+
+
+METHOD:: basicNewByArgPaths
+Create a new Syn with path-style arguments (see link::Classes/Syn#*newByArgPaths::, but don't perform it.
+
+ARGUMENT:: source
+A SynthDef name (string or symbol), or a Function, specifying the main output signal.
+
+ARGUMENT:: args
+A Synth-style argument list, where names may be paths to Plug inputs in the tree: code::[name, value, name, value...]::.
+
+ARGUMENT:: target
+The node relative to which this Syn's nodes will be created.
+
+ARGUMENT:: addAction
+One of code::\addToHead::, code::\addToTail::, code::\addBefore:: or code::\addAfter::.
+
+returns:: An idle Syn instance.
+
 
 
 METHOD:: useGroup
@@ -529,6 +578,51 @@ To set the main synth's 'amp' parameter, use code::x.set(\amp, 0.1)::.
 To set the frequency range of the Plug controlling 'freq': code::x.set("freq/low", 500, "freq/high", 1200)::. (Note that there is no leading slash.)
 
 To set the innermost Plug, continue adding to the path: code::"freq/rate/rate"::, code::"freq/rate/low":: etc.
+
+code::Syn.newByArgPaths:: supports "set"-style path arguments at Syn creation time. For example, all of the following are equivalent to code::x:: above.
+
+code::
+(
+y = Syn.newByArgPaths(\default, [
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo),
+	"freq/rate/rate": 0.7,
+	"freq/rate/low": 1,
+	"freq/rate/high": 70,
+	"amp": 0.05
+]);
+)
+
+y.free;
+
+// OR: path args merge into Plug-specific arg lists
+(
+y = Syn.newByArgPaths(\default, [
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo, [low: 1, high: 70]),
+	"freq/rate/rate", 0.7,
+	"amp", 0.05
+]);
+)
+
+y.free;
+
+// OR: path args take precedence over Plug arg lists
+// regardless of order of definition
+(
+y = Syn.newByArgPaths(\default, [
+	"freq/rate/rate", 0.7,
+	"freq/rate/high", 6,  // overwrites 70 below
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo, [low: 1, high: 70]),
+	"amp", 0.05
+]);
+)
+
+y.free;
+::
+
+The redundancy in the multiple paths might be cumbersome to type manually, but in some cases may be more convenient to generate programmatically.
 
 What if you try code::x.set(\freq, 300)::? "freq" is mapped to a Plug. Setting it to a fixed value would break the modulation. Instead, Syn will try to push the freq set down to a lower level Plug, if possible. In this case, the Plug synth has no 'freq' input, so nothing will happen. If it did have a 'freq' input, then it would be set at the second level.
 

@@ -1222,3 +1222,167 @@ s.sendBundle(nil, t.preparationMessages[0][1]);
 /fmm/tsn-
 
 /fmm = "[1357]::\xpose("(13)(14)(15)")";
+
+
+// flat args
+// a-ha... so it's not an MLID b/c "freq" isn't a leaf but needs an item
+["freq", Plug { |rate = 1| ... }, "freq/rate", 3]
+-->
+ID[
+	"freq" (path) -> ID[
+		name: "freq",  // actually put these 2 in the proto
+		value: Plug({ ... src ... }),
+		args: ID[
+			"freq/rate" -> ID[
+				name: "rate",
+				value: 3
+			]
+		]
+	]
+]
+
+x = ["freq", Plug(\xyz), "freq/rate", 3];
+
+(
+// separatedPath = array of symbols
+var putPath = { |dict, separatedPath, item|
+	var here = dict, parent;
+	separatedPath.do { |name|
+		var subdict;
+		name = name.asSymbol;
+		subdict = here[name];
+		if(subdict.isNil) {
+			subdict = IdentityDictionary.new;
+			here[name] = subdict;
+		};
+		parent = here;
+		here = subdict;
+	};
+	if(here.proto.notNil) {
+		Error("Duplicate value being put at " ++ separatedPath.join($/)).throw;
+	};
+	[separatedPath, here].debug("path, here");
+	here.proto = IdentityDictionary[
+		// \name -> separatedPath.last.asSymbol,
+		\value -> item
+	].debug("proto");
+	parent.put(separatedPath.last.asSymbol/*.debug("here's location")*/, here);
+	dict
+};
+
+f = { |argList|
+	var dict = IdentityDictionary.new;
+	argList.pairsDo { |path, item|
+		putPath.(dict, path.asString.split($/), item);
+	};
+	dict
+};
+)
+
+d = f.(x);
+
+d.keysValuesDo { |k, v| [k, v].postln }; ""
+d.proto
+
+d[\freq].keysValuesDo { |k, v| [k, v].postln }; ""
+d[\freq].proto
+d[\freq][\rate].proto
+d[\freq]['freq/rate'].proto
+
+// now try to build nested arg list
+(
+g = { |argDict|
+	var argList;
+	argDict.keysValuesDo { |name, item|
+		var thing = item.proto.tryPerform(\at, \value);
+		if(thing.isKindOf(Plug)) {
+			thing.args = g.(item);
+		};
+		if(thing.notNil) {
+			argList = argList.add(name).add(thing);
+		};
+	};
+	argList
+};
+)
+
+a = g.(d);
+a[1].args
+
+
+(
+x = Syn.newFlat(\default, [
+	"freq", Plug({ |rate = 3| LFDNoise3.kr(rate).exprange(200, 800) }),
+	"freq/rate", Plug({ SinOsc.kr(0.5).exprange(1, 25) })
+]);
+)
+
+x.args
+x.args[1].args
+x.free;
+
+
+
+(
+SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
+	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
+}).add;
+)
+
+(
+x = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+)
+
+x.argAt(\freq)  // a Plug
+x.argAt(\freq).concreteArgs  // rate --> another Plug
+x.argAt(\freq).argAt(\rate).concreteArgs
+
+x.free;
+
+(
+y = Syn.newByArgPaths(\default, [
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo),
+	"freq/rate/rate", 0.7,
+	"freq/rate/low", 1,
+	"freq/rate/high", 70,
+	"amp", 0.05
+]);
+)
+
+(
+y = Syn.newByArgPaths(\default, [
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo, [low: 1, high: 70]),
+	"freq/rate/rate", 0.7,
+	// "freq/rate/low", 1,
+	// "freq/rate/high", 70,
+	"amp", 0.05
+]);
+)
+
+(
+y = Syn.newByArgPaths(\default, [
+	"freq/rate/rate", 0.7,
+	"freq/rate/high", 6,
+	"freq": Plug(\freqlfo),
+	"freq/rate": Plug(\freqlfo, [low: 1, high: 70]),
+	// "freq/rate/low", 1,
+	// "freq/rate/high", 70,
+	"amp", 0.05
+]);
+)
+
+y.argAt(\freq)  // a Plug
+y.argAt(\freq).concreteArgs  // rate --> another Plug
+y.argAt(\freq).argAt(\rate).concreteArgs
+
+y.free;

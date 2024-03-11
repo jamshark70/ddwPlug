@@ -62,7 +62,7 @@ map: \sym1 -> \sym2
 */
 
 Plug {
-	var <source, <args, <rate, <numChannels;
+	var <source, <>args, <rate, <numChannels;
 	var <>map;
 	var <node, <dest;
 	var <bus;  // use AutoReleaseBus
@@ -348,6 +348,67 @@ Syn {
 
 	*basicNew { |source, args, target(Server.default.defaultGroup), addAction(\addToTail)|
 		^super.newCopyArgs(source, args, target, addAction)
+	}
+
+	*newByArgPaths { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency|
+		// need two calls because dictToNestedArgs is recursive
+		^super.newCopyArgs(source, this.dictToNestedArgs(this.flatArgsToDict(args)), target, addAction).play(latency);
+	}
+
+	*basicNewByArgPaths { |source, args, target(Server.default.defaultGroup), addAction(\addToTail)|
+		^super.newCopyArgs(source, this.dictToNestedArgs(this.flatArgsToDict(args)), target, addAction);
+	}
+
+	*flatArgsToDict { |argList|
+		var dict = IdentityDictionary.new;
+		argList.pairsDo { |path, item|
+			var here = dict, plugArgs, parent;
+			var separatedPath = path.asString.split($/);
+			separatedPath.do { |name|
+				var subdict;
+				name = name.asSymbol;
+				subdict = here[name];
+				if(subdict.isNil) {
+					subdict = IdentityDictionary.new;
+					here[name] = subdict;
+				};
+				parent = here;
+				here = subdict;
+			};
+			if(item.isKindOf(Plug)) {
+				if(item.args.size > 0) {
+					plugArgs = IdentityDictionary.new;
+					item.args.pairsDo { |key, value|
+						plugArgs.put(key, IdentityDictionary.new(
+							proto: IdentityDictionary[
+								\value -> value
+							]
+						));
+					};
+					// overwrite with previously defined path args
+					here = plugArgs.putAll(here);
+				};
+			};
+			here.proto = IdentityDictionary[
+				\value -> item
+			];
+			parent.put(separatedPath.last.asSymbol, here);
+		};
+		^dict.postln
+	}
+
+	*dictToNestedArgs { |argDict|
+		var argList;
+		argDict.keysValuesDo { |name, item|
+			var thing = item.proto.tryPerform(\at, \value);
+			if(thing.isKindOf(Plug)) {
+				thing.args = this.dictToNestedArgs(item);
+			};
+			if(thing.notNil) {
+				argList = argList.add(name).add(thing);
+			};
+		};
+		^argList
 	}
 
 	play { |latency|
