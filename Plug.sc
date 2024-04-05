@@ -334,7 +334,7 @@ Plug {
 Syn {
 	classvar <>useGroup = false;
 
-	var <>source, <>args, <>target, <>addAction;
+	var <source, <>args, <>target, <>addAction;
 	var <node, <group, watcher;
 	var <concreteArgs, argLookup;
 	var <antecedents;
@@ -445,12 +445,39 @@ Syn {
 		^bundle
 	}
 
+	setSourceToBundle { |src, bundle(OSCBundle.new)|
+		if(synthDesc.notNil and: { synthDesc.hasGate }) {
+			bundle.add(node.releaseMsg)
+		} {
+			bundle.add(node.freeMsg)
+		};
+		node = src.preparePlugSource(this, bundle, concreteArgs);
+		// ^^ so that the above call serves as the validation
+		// if you pass in a wrong object, that will barf without breaking the Syn instance
+		source = src;
+		this.getSynthDesc(bundle);
+		source.preparePlugBundle(
+			// here, Plugs should already have been concrete-ized
+			// so this should just write bus-mapping symbols into
+			// the array and *not* re-prepare any synths
+			this, bundle, concreteArgs.asOSCArgArray,
+			*this.bundleTarget
+		);
+		^bundle
+	}
+	source_ { |src, latency|
+		var bundle = OSCBundle.new;
+		this.setSourceToBundle(src, bundle);
+		this.sendBundle(bundle, latency)
+	}
+
 	sendBundle { |bundle, latency|
 		bundle.sendOnTime(target.server, latency);
 		this.registerNodes;
 	}
 
 	registerNodes {
+		if(watcher.notNil) { watcher.free };
 		watcher = OSCFunc({ |msg|
 			// node may have changed, if you hot-swapped the source
 			if(node.notNil and: { node.nodeID == msg[1] }) {

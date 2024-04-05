@@ -1386,3 +1386,38 @@ y.argAt(\freq).concreteArgs  // rate --> another Plug
 y.argAt(\freq).argAt(\rate).concreteArgs
 
 y.free;
+
+
+
+// Syn source_
+a = Syn(\default, [freq: Plug(\freqlfo)]);
+
+// prelim testing: only updates var, not server
+a.source = { |freq = 440| VarSaw.ar(freq, 0, 0.8).dup * 0.1 };
+
+/*
+relevant code:
+		node = source.preparePlugSource(this, bundle, concreteArgs);
+		this.getSynthDesc(bundle);
+		source.preparePlugBundle(
+			this, bundle, concreteArgs.asOSCArgArray,
+			*this.bundleTarget
+		);
+*/
+
+b = OSCBundle.new;
+
+n = a.source.preparePlugSource(a, b, a.concreteArgs);
+a.slotPut(\node, n);
+
+b.preparationMessages  // d_recv OK
+
+a.getSynthDesc(b);
+
+a.synthDesc  // i_out freq fadeTime gate OK
+
+a.source.preparePlugBundle(a, b, a.concreteArgs.asOSCArgArray, *a.bundleTarget);
+
+b.messages  // correct creation message
+
+a.free;
