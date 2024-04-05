@@ -18,7 +18,7 @@ AutoReleaseBus : Bus {
 	var clients;
 
 	free { |... why|
-		super.free;
+		if(index.notNil) { super.free };
 		this.changed(\didFree, *why);
 	}
 
@@ -513,9 +513,6 @@ Syn {
 				set.do { |object|
 					var old;
 					old = object.argAt(ctlname);
-					if(old.isKindOf(Plug)) {
-						old.freeToBundle(bundle);
-					};
 					if(object !== this) {
 						bundle.add(object.perform(selector, ctlname, value));
 						// Plug 'set' gets updated in the plug object, not here
@@ -524,6 +521,11 @@ Syn {
 						bundle.add(node.perform(selector, ctlname, value));
 						// btw this should be true only once b/c a Set can't have dupes
 						this.updateOneArg(ctlname, value);
+					};
+					if(old.isKindOf(Plug)) {
+						// prevent bus leakage
+						old.bus.removeClient(this);
+						old.freeToBundle(bundle);
 					};
 				}
 			};
@@ -535,11 +537,13 @@ Syn {
 			if(obj.notNil) {
 				ctlname = key.asString.split($/).last.asSymbol;
 				old = obj.argAt(ctlname);
-				if(old.isKindOf(Plug)) {
-					old.freeToBundle(bundle);
-				};
 				new = obj.setPlugToBundle(ctlname, value, bundle);
 				obj.updateOneArg(ctlname, new);
+				if(old.isKindOf(Plug)) {
+					// prevent bus leakage
+					old.bus.removeClient(this);
+					old.freeToBundle(bundle);
+				};
 				// 'controls' map tree for this root object
 				// may have changed; for now, just delete it
 				// (it will be rebuilt on demand when needed)
