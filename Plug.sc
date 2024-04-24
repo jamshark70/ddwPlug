@@ -826,7 +826,9 @@ Syn {
 	}
 
 	releaseToBundle { |bundle(OSCBundle.new), gate = 0|
-		bundle = bundle.add([15, node.nodeID, \gate, gate]);
+		if(node.notNil) {
+			bundle = bundle.add([15, node.nodeID, \gate, gate]);
+		};
 		^bundle
 	}
 
