@@ -905,7 +905,7 @@ Syn {
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
-				~group = Group.basicNew(~server, ~group);
+				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
@@ -1014,7 +1014,7 @@ Syn {
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
-				~group = Group.basicNew(~server, ~group);
+				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
