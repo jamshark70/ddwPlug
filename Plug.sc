@@ -394,7 +394,7 @@ Syn {
 			];
 			parent.put(separatedPath.last.asSymbol, here);
 		};
-		^dict.postln
+		^dict
 	}
 
 	*dictToNestedArgs { |argDict|
