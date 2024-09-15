@@ -1099,6 +1099,7 @@ SynthDefTracker {
 			set.remove(object);
 			if(set.isEmpty) {
 				object.server.sendMsg(\d_free, defname);
+				all[object.server].removeAt(defname);
 			};
 		};
 	}
