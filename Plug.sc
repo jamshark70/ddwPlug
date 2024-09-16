@@ -1066,7 +1066,72 @@ Syn {
 					);
 				};
 			});
-			// monoSyn?
+
+			Event.addEventType(\monoSyn, { |server|
+				var freqs, lag, strum, sustain;
+				var bndl, oscBundles, addAction, sendGate, ids, i;
+				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
+
+				// note, detunedFreq not supported
+				freqs = ~freq.value;
+
+				// msgFunc gets the synth's control values from the Event
+				msgFunc = ~getMsgFunc.valueEnvir;
+				instrumentName = ~synthDefName.valueEnvir;
+
+				sendGate = ~sendGate ? ~hasGate;
+
+				// update values in the Event that may be determined by functions
+				~freq = freqs;
+				~amp = ~amp.value;
+				~sustain = sustain = ~sustain.value;
+				lag = ~lag;
+				offset = ~timingOffset;
+				strum = ~strum;
+				~server = server;
+				~latency = ~latency ?? { server.latency };  // seriously...?
+				~isPlaying = true;
+				addAction = Node.actionNumberFor(~addAction);
+
+				// compute the control values and generate OSC commands
+				// assumes caller has prepared ~args *with* SynthDesc arg names
+				// special case event type, should only be used with Pmsyn
+				// which takes care of this
+				bndl = ~args.envirPairs;
+
+				bndl.pairsDo { |key, value, i|
+					var plugKey = (key.asString ++ "Plug").asSymbol;
+					var plug = plugKey.envirGet;
+					if(plug.canMakePlug) {
+						bndl[i+1] = plug.dereference.valueEnvir(value)
+					};
+				};
+
+				~group = ~group.value;
+				// why? because ~group is (by default) the defaultGroup's ID, not the object
+				~group = Group.basicNew(~server, ~group.asNodeID);
+				bndl = bndl.flop;
+				oscBundles = Array(bndl.size);
+				~syn = bndl.collect { |args|
+					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
+					oscBundles.add(n.prepareToBundle);
+					n.registerNodes  // returns n
+				};
+				{
+					var start = thisThread.seconds;
+					oscBundles.do { |bndl|
+						bndl.doPrepare(server, inEnvir {
+							var latency;
+							latency = ~latency + start - thisThread.seconds;
+							~schedBundleArray.(lag, offset, server,
+								bndl.messages, latency);
+						});
+					};
+				}.fork(SystemClock);
+
+				~id = ~syn.collect { |syn| syn.node.nodeID };
+				~updatePmono.(~id, server);
+			});
 		}
 	}
 }

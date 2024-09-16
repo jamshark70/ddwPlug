@@ -1,0 +1,93 @@
+TITLE:: Pmsyn
+summary:: Wrapper to make Pmono work with Syn/Plug
+categories:: Streams-Patterns-Events>Patterns>Filter
+related:: Classes/Syn, Classes/Pmono, Classes/PmonoArtic
+
+DESCRIPTION::
+link::Classes/Pmono:: and link::Classes/PmonoArtic:: are not directly compatible with link::Classes/Syn::.
+
+Pmsyn is a wrapper around Pmono and PmonoArtic, so that they work with Syn and support the features of Plugs in patterns.
+
+This class should have no effect if it's wrapping a non-mono pattern (thus, no reason to use it in that case).
+
+note:: Plugs will not automatically retrigger for slurred events. If you need re-triggering, you would need to provide a trigger argument, and set it in the pattern. See Examples below. ::
+
+
+EXAMPLES::
+
+code::
+// define an attack-slide envelope
+(
+SynthDef(\modAtkEnv, { |out, value, ratio = 4, clipLo = 20, clipHi = 20000, decay = 0.08, lag = 0.02|
+	Out.kr(out, (
+		Lag.kr(value, lag) * EnvGen.kr(Env([1, ratio, 1], [0, decay], \exp))
+	).clip(clipLo, clipHi))
+}).add;
+)
+
+// one 'zap' at the beginning
+// (because the Plug runs at the start of the slurred sequence)
+(
+p = Pmsyn(
+	Pmono(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq|
+			Plug(\modAtkEnv, [value: freq, ratio: 8], map: (freq: \value))
+		},
+		\dur, 0.25
+	)
+).play;
+)
+
+p.stop;
+
+// PmonoArtic retriggers at the beginning of each slurred group
+(
+p = Pmsyn(
+	PmonoArtic(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq|
+			Plug(\modAtkEnv, [value: freq, ratio: 8, decay: 0.03], map: (freq: \value))
+		},
+		\dur, 0.25,
+		\legato, Pwrand([0.4, 1.05], [0.25, 0.75], inf)
+	)
+).play;
+)
+
+p.stop;
+
+// or you can define your own triggering for Pmono
+
+(
+SynthDef(\modAtkEnv, { |out, value, ratio = 4, clipLo = 20, clipHi = 20000, decay = 0.08, lag = 0.02|
+	// Plug synthdef has a retrigger input
+	var trig = NamedControl.tr(\trig, 1);
+	Out.kr(out, (
+		Lag.kr(value, lag) * EnvGen.kr(Env([1, ratio, 1], [0, decay], \exp), trig)
+	).clip(clipLo, clipHi))
+}).add;
+)
+
+(
+p = Pmsyn(
+	Pmono(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq, trig|
+			Plug(\modAtkEnv, [value: freq, ratio: 8, trig: trig],
+				map: (freq: \value)
+			)
+		},
+		\dur, 0.25,
+
+		// specify trigger location by arg path
+		'freq/trig', Pwrand([0, 1], [0.8, 0.2], inf),
+
+		// Plug args can't be auto-detected in the event
+		// List them under \args and these will be added
+		// to the main SynthDef's args
+		\args, ['freq/trig']
+	)
+).play;
+)
+::
