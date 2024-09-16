@@ -1061,7 +1061,7 @@ Syn {
 
 				bndl.do { |args, i|
 					~schedBundleArray.value(~lag, ~timingOffset, server,
-						syn.wrapAt(i).setToBundle(nil, *args),
+						syn.wrapAt(i).setToBundle(nil, *args).messages,
 						~latency
 					);
 				};
