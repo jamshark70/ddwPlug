@@ -520,6 +520,8 @@ y.set('freq/rate', 5, 'freq/high', 1000);
 
 y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
 
+y.controls['freq/rate/rate'].keysValuesDo { |key, set| set.do { |plug| plug.node.postln } }; ""
+
 y.release;
 
 (
@@ -1421,3 +1423,194 @@ a.source.preparePlugBundle(a, b, a.concreteArgs.asOSCArgArray, *a.bundleTarget);
 b.messages  // correct creation message
 
 a.free;
+
+
+
+
+// crossfade
+(
+a = Syn(\default, [
+	freq: Plug({
+		LFDNoise3.kr(2).exprange(600, 1000)
+	}, [fadeTime: 5])
+]);
+)
+
+(
+a.argAtPath("freq").source = {
+	LFSaw.kr(5).exprange(80, 500)
+};
+)
+
+a.free;
+
+(
+a = Syn({ |ffreq = 2000|
+	LPF.ar(\in.ar(0!2), ffreq) * 0.1
+}, [in: Plug({ Saw.ar([440, 441]) }, [fadeTime: 5], rate: \audio)]);
+)
+
+a.argAtPath("in").source = { VarSaw.ar([220, 221], 0, 0.7) };
+
+a.free;
+
+
+
+// what about Plug-ging something that is bus-mapped?
+(
+v = Voicer(10, Syn.basicNew(\default));
+v.mapGlobal(\pan, nil, 0, \bipolar);
+)
+
+v.gate(440, 1, 0.5);
+
+Event.eventTypes[\voicerNote].postcs
+
+v.unmapGlobal(\pan);
+
+// 'args' in the event are passed through to triggerMsg
+(
+e = (
+	type: \voicerNote, voicer: v,
+	freq: 330
+).play;
+)
+
+// to see 'panPlug', 'pan' needs to be included in the event
+// but it's mapped globally
+(
+e = (
+	type: \voicerNote, voicer: v,
+	freq: 330,
+	panPlug: { |pan| pan.postln; 0 }
+).play;
+)
+
+
+
+
+// prefixed parameters?
+(
+SynthDef(\filter, { |out, ffreq = 1000, rq = 0.01|
+	var in = NamedControl.ar(\in, 0!2);
+	in = BLowPass4.ar(in, ffreq, rq);
+	DetectSilence.ar(in, doneAction: 2);
+	Out.ar(out, in);
+}).add;
+)
+
+e = (type: \syn, instrument: \filter, in: Plug(\default), 'in/freq': 900).play;
+e.put(\type, \synOff).play;
+
+e = (type: \syn, instrument: \filter, in: Plug(\default, [freq: 900])).play;
+e.put(\type, \synOff).play;
+
+
+
+// pmono?
+e = (type: \synOn, amp: Plug { SinOsc.kr(0.25) }).play;
+
+e[\syn][0].node.nodeID
+
+// not synOff -- ah, it *does* clear the whole thing
+(type: \off, id: e[\syn].collect { |syn| syn.node.nodeID }).play;
+
+// hm, how does 'envirPairs' handle nil?
+~abc = 1;
+[\abc, \def].envirPairs  // drops def! Great!
+
+SynthDescLib.at(\default).msgFunc.def.argNames.envirPairs
+
+// setToBundle is doing something weird
+x = Syn(\default);
+z = x.setToBundle(nil, \out, 0, \freq, 316.28480468049, \amp, 0.1, \pan, 0.0);
+z.messages
+x.free;
+
+// did synSet never work?
+e = (type: \synOn).play;
+e.putAll((type: \synSet, args: #[freq], freq: 72.midicps)).play;
+e.put(\type, \synOff).play;
+
+p = Pmono(\default, \freq, Pseries(1, 1, inf) * 100, \dur, 1).collect { |ev| thisThread.clock.sched(0.1, { ev.postln }); ev }.play;
+p.stop;
+
+p = Pmsyn(
+	Pmono(\default,
+		\freq, Pexprand(300, 900, inf),
+		\dur, 0.25
+	)
+).play;
+
+(
+SynthDef(\modAtkEnv, { |out, value, ratio = 4, clipLo = 20, clipHi = 20000, decay = 0.08, lag = 0.02|
+	Out.kr(out, (
+		Lag.kr(value, lag) * EnvGen.kr(Env([1, ratio, 1], [0, decay], \exp))
+	).clip(clipLo, clipHi))
+}).add;
+)
+
+// 'k that 'map' thing is pretty slick
+p = Pmsyn(
+	Pmono(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq|
+			Plug(\modAtkEnv, [value: freq, ratio: 8], map: (freq: \value))
+		},
+		\dur, 0.25
+	)
+).play;
+
+p.stop;
+
+(
+p = Pmsyn(
+	PmonoArtic(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq|
+			Plug(\modAtkEnv, [value: freq, ratio: 8, decay: 0.03], map: (freq: \value))
+		},
+		\dur, 0.25,
+		\legato, Pwrand([0.4, 1.05], [0.25, 0.75], inf)
+	)
+).play;
+)
+
+p.stop;
+
+
+p = Pmsyn(Pbind(\freq, Pexprand(300, 900, inf), \dur, 0.25)).play;
+p.stop;
+
+
+// manual retriggering: problem: need to let user specify args
+
+(
+SynthDef(\modAtkEnv, { |out, value, ratio = 4, clipLo = 20, clipHi = 20000, decay = 0.08, lag = 0.02|
+	var trig = NamedControl.tr(\trig, 1);
+	Out.kr(out, (
+		Lag.kr(value, lag) * EnvGen.kr(Env([1, ratio, 1], [0, decay], \exp), trig)
+	).clip(clipLo, clipHi))
+}).add;
+)
+
+(
+p = Pmsyn(
+	Pmono(\default,
+		\freq, Pexprand(300, 900, inf),
+		\freqPlug, { |freq, trig|
+			Plug(\modAtkEnv, [value: freq, ratio: 8, trig: trig],
+				map: (freq: \value)
+			)
+		},
+		\dur, 0.25,
+		'freq/trig', Pwrand([0, 1], [0.8, 0.2], inf),
+		// Plug args can't be auto-detected in the event
+		// List them under \args and these will be added
+		// to the main SynthDef's args
+		\args, ['freq/trig']
+	)
+).play;
+)
+
+p.stop;
