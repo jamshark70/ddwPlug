@@ -108,10 +108,24 @@
 + Function {
 	preparePlugSource { |dest, bundle, argList|
 		var fadeTime = if(dest.rate == \audio, 0.1, nil);
-		var def = this.asSynthDef(fadeTime: fadeTime, /*name: */);
+		var def;
 		var node;
-		bundle.addPrepare([\d_recv, def.asBytes]);
-		SynthDefTracker.register(dest, def.name);
+		// 'dest' is for the Server object
+		def = SynthDefTracker.cache(dest, this);
+		if(def.isNil) {
+			def = this.asSynthDef(
+				fadeTime: fadeTime,
+				name: ("plugDef" ++ UniqueID.next).asSymbol
+			);
+			// only add prep message if it's a new synthdef
+			bundle.addPrepare([\d_recv, def.asBytes]);
+		} {
+			if(SystemClock.seconds - def[\timeAdded] < 0.12) {
+				bundle.addPrepare([\sync]);
+			};
+			def = def[\synthdef];
+		};
+		SynthDefTracker.register(dest, def, this);
 		^Synth.basicNew(def.name, dest.server)
 	}
 	preparePlugBundle { |dest, bundle, args, target, action|
@@ -124,7 +138,7 @@
 		));
 		OSCFunc({ |msg|
 			if(myID == msg[1]) {
-				SynthDefTracker.release(dest, myDefName);
+				SynthDefTracker.release(dest, myDefName, this);
 			};
 		}, '/n_end', dest.server.addr, argTemplate: [dest.node.nodeID])
 		.fix.oneShot;

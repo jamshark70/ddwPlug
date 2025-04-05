@@ -110,6 +110,42 @@ x = Syn(\default, [
 
 x.release;
 
+SynthDefTracker.all
+
+(
+f = {
+	Syn(\default, [
+		freq: Plug({ LFDNoise3.kr(8).exprange(200, 800) })
+	]);
+};
+)
+
+x = f.value;
+x.release;
+
+y = f.value;
+y.release;
+
+f = { |a = 1| { a } };
+
+f = { |a = 1| { 123 } };
+
+a = f.value(1);
+b = f.value(2);
+
+a == b
+a.hash
+b.hash
+Function.findRespondingMethodFor(\hash)
+
+a.instVarHash
+b.instVarHash
+
+a.dump
+b.dump
+
+a.compareObject(b)
+
 
 // shared cable
 (
@@ -813,6 +849,8 @@ p = Pbind(
 )
 
 p.stop;
+
+SynthDefTracker.all
 
 
 
@@ -1610,6 +1648,166 @@ p = Pmsyn(
 		// to the main SynthDef's args
 		\args, ['freq/trig']
 	)
+).play;
+)
+
+p.stop;
+
+
+
+
+// caching
+s.dumpOSC(1);
+
+(
+x = Syn(\default, [
+	freq: Plug { LFDNoise3.kr(3).exprange(200, 800) }
+]);
+
+y = Syn(\default, [
+	freq: Plug { LFDNoise3.kr(3).exprange(200, 800) }
+]);
+)
+
+[ "#bundle", 1,
+  [ "/d_recv", DATA[214] ],  // x's Plug synthef
+  [ "/sync", 1008 ]
+]
+[ "#bundle", 1,
+  [ "/d_recv", DATA[214] ],  // y's Plug synthef
+  [ "/sync", 1009 ]
+]
+[ "#bundle", 1,
+  [ 9, "plugDef1006", 1000, 1, 1, "out", 0, "i_out", 0 ],
+  [ 9, "default", 1001, 3, 1000, "freq", "c0" ]
+]
+[ "#bundle", 1,
+  [ 9, "plugDef1007", 1002, 1, 1, "out", 1, "i_out", 1 ],
+  [ 9, "default", 1003, 3, 1002, "freq", "c1" ]
+]
+
+x.release; y.release;
+
+
+(
+f = { LFDNoise3.kr(3).exprange(200, 800) };
+
+x = Syn(\default, [
+	freq: Plug(f)
+]);
+
+y = Syn(\default, [
+	freq: Plug(f)
+]);
+)
+
+[ "#bundle", 1,
+  [ "/d_recv", DATA[214] ],  // one SynthDef for x
+  [ "/sync", 1011 ]
+]
+[ "#bundle", 1,
+  [ "/sync", ],              // y does not make a SynthDef
+  [ "/sync", 1012 ]
+]
+[ "#bundle", 1,
+  [ 9, "plugDef1010", 1004, 1, 1, "out", 0, "i_out", 0 ],
+  [ 9, "default", 1005, 3, 1004, "freq", "c0" ]
+]
+[ "#bundle", 1,
+  [ 9, "plugDef1010", 1006, 1, 1, "out", 1, "i_out", 1 ],
+  [ 9, "default", 1007, 3, 1006, "freq", "c1" ]
+]
+
+x.release; y.release;
+
+
+// Ex. C -- 'baseFreq' changes function context
+// no cache hit
+(
+f = { |baseFreq = 440| { baseFreq * LFDNoise3.kr(3).exprange(0.5, 2) } };
+
+x = Syn(\default, [
+	freq: Plug(f.value(220))
+]);
+
+y = Syn(\default, [
+	freq: Plug(f.value(440))
+]);
+)
+
+x.release; y.release;
+
+
+// Ex. D -- 'f' produces a Plug with an argument list
+// Cache is hit in this case
+(
+f = { |baseFreq = 440|
+	Plug({ |baseFreqArg|
+		baseFreqArg * LFDNoise3.kr(3).exprange(0.5, 2)
+	}, [baseFreqArg: baseFreq])
+};
+
+x = Syn(\default, [
+	freq: f.value(220)
+]);
+
+y = Syn(\default, [
+	freq: f.value(440)
+]);
+)
+
+x.release; y.release;
+
+
+// does cache
+
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\freq, Plug {
+		ExpRand(200, 500) * LFDNoise3.kr(3).exprange(0.95, 1.05)
+	},
+	\dur, Pexprand(0.2, 0.8, inf),
+	\legato, Pexprand(0.7, 1.4, inf)
+).play;
+)
+
+p.stop;
+
+
+// does cache
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\freq, Pexprand(200, 500, inf),
+	\freqPlug, { |freq|
+		Plug({ |freqSynthArg|
+			freqSynthArg * LFDNoise3.kr(3).exprange(0.95, 1.05)
+		}, [freqSynthArg: freq])
+	},
+	\dur, Pexprand(0.2, 0.8, inf),
+	\legato, Pexprand(0.7, 1.4, inf)
+).play;
+)
+
+p.stop;
+
+
+// does not cache
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\freq, Pexprand(200, 500, inf),
+	\freqPlug, { |freq|
+		Plug {
+			freq * LFDNoise3.kr(3).exprange(0.95, 1.05)
+		}
+	},
+	\dur, Pexprand(0.2, 0.8, inf),
+	\legato, Pexprand(0.7, 1.4, inf)
 ).play;
 )
 

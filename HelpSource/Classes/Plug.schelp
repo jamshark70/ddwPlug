@@ -21,6 +21,161 @@ If the Syn is played with messaging latency (see link::Guides/ServerTiming.html:
 
 If it's played without latency, it will still code::server.sync::, and the audio will be produced as soon as possible after that. Timing accuracy will be lost (but not any worse than link::Classes/Function#-play::).
 
+April 2025: If several Plugs reuse the same function definition, they may be able to reuse the temporary SynthDef.
+
+Caching depends on functions sharing the same (identical) FunctionDef and the same "context." In ex. A, the two Plugs are based on physically distinct functions; hence their definitions are not identical, and two SynthDefs are generated. In ex. B, the two Plugs use one function object and share one SynthDef. (Executing the same block of code twice produces all-new function definitions; cache cannot be used across multiple interpreter invocations.)
+
+code::
+s.dumpOSC(1);
+
+// Ex. A -- no cache hit
+(
+x = Syn(\default, [
+	freq: Plug { LFDNoise3.kr(3).exprange(200, 800) }
+]);
+
+y = Syn(\default, [
+	freq: Plug { LFDNoise3.kr(3).exprange(200, 800) }
+]);
+)
+
+[ "#bundle", 1, 
+  [ "/d_recv", DATA[214] ],  // x's Plug synthef
+  [ "/sync", 1008 ]
+]
+[ "#bundle", 1, 
+  [ "/d_recv", DATA[214] ],  // y's Plug synthef
+  [ "/sync", 1009 ]
+]
+[ "#bundle", 1, 
+  [ 9, "plugDef1006", 1000, 1, 1, "out", 0, "i_out", 0 ],
+  [ 9, "default", 1001, 3, 1000, "freq", "c0" ]
+]
+[ "#bundle", 1, 
+  [ 9, "plugDef1007", 1002, 1, 1, "out", 1, "i_out", 1 ],
+  [ 9, "default", 1003, 3, 1002, "freq", "c1" ]
+]
+
+x.release; y.release;
+
+// Ex. B -- cache hit
+(
+f = { LFDNoise3.kr(3).exprange(200, 800) };
+
+x = Syn(\default, [
+	freq: Plug(f)
+]);
+
+y = Syn(\default, [
+	freq: Plug(f)
+]);
+)
+
+[ "#bundle", 1, 
+  [ "/d_recv", DATA[214] ],  // one SynthDef for x
+  [ "/sync", 1011 ]
+]
+[ "#bundle", 1, 
+  [ "/sync", ],              // y does not make a SynthDef
+  [ "/sync", 1012 ]
+]
+[ "#bundle", 1, 
+  [ 9, "plugDef1010", 1004, 1, 1, "out", 0, "i_out", 0 ],
+  [ 9, "default", 1005, 3, 1004, "freq", "c0" ]
+]
+[ "#bundle", 1, 
+  [ 9, "plugDef1010", 1006, 1, 1, "out", 1, "i_out", 1 ],
+  [ 9, "default", 1007, 3, 1006, "freq", "c1" ]
+]
+
+x.release; y.release;
+::
+
+Open functions may cause the "context" to be different, also preventing cache use (ex. C). Instead, if a function passes a parameter into a Plug's argument list, then the Plug function can be closed and share context, hitting cache (ex. D). Ex. E and F show the same distinction in a Pattern context.
+
+code::
+// Ex. C -- 'baseFreq' changes function context
+// no cache hit
+(
+f = { |baseFreq = 440| { baseFreq * LFDNoise3.kr(3).exprange(0.5, 2) } };
+
+x = Syn(\default, [
+	freq: Plug(f.value(220))
+]);
+
+y = Syn(\default, [
+	freq: Plug(f.value(440))
+]);
+)
+
+x.release; y.release;
+
+// Ex. D -- 'f' produces a Plug with an argument list
+// Cache is hit in this case
+(
+f = { |baseFreq = 440|
+	Plug({ |baseFreqArg|
+		baseFreqArg * LFDNoise3.kr(3).exprange(0.5, 2)
+	}, [baseFreqArg: baseFreq])
+};
+
+x = Syn(\default, [
+	freq: f.value(220)
+]);
+
+y = Syn(\default, [
+	freq: f.value(440)
+]);
+)
+
+x.release; y.release;
+
+// Ex. E
+// 'freq' passed into freqPlug function
+// creates a new context for each Plug function
+// Each event plays its own SynthDef = redundant work
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\freq, Pexprand(200, 500, inf),
+	\freqPlug, { |freq|
+		Plug {
+			freq * LFDNoise3.kr(3).exprange(0.95, 1.05)
+		}
+	},
+	\dur, Pexprand(0.2, 0.8, inf),
+	\legato, Pexprand(0.7, 1.4, inf)
+).play;
+)
+
+p.stop;
+
+// Ex. F
+// 'freq' goes into the Plug's argument list
+// The Plug function is closed, so context is shared.
+// Only the first event makes a SynthDef;
+// all the others hit cache.
+(
+p = Pbind(
+	\type, \syn,
+	\instrument, \default,
+	\freq, Pexprand(200, 500, inf),
+	\freqPlug, { |freq|
+		Plug({ |freqSynthArg|
+			freqSynthArg * LFDNoise3.kr(3).exprange(0.95, 1.05)
+		}, [freqSynthArg: freq])
+	},
+	\dur, Pexprand(0.2, 0.8, inf),
+	\legato, Pexprand(0.7, 1.4, inf)
+).play;
+)
+
+p.stop;
+::
+
+Using a named SynthDef guarantees reuse, of course.
+
 
 CLASSMETHODS::
 

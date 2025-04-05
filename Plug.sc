@@ -124,7 +124,7 @@ Plug {
 				node = source.preparePlugSource(this, bundle, concreteArgs);
 				// bundle is a sneaky way to extract a Function's def
 				// though probably inadequate for some future requirement
-				this.findOutputChannel(bundle, source);
+				this.findOutputChannel(bundle, source, node);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 				concreteArgs = concreteArgs ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
@@ -226,8 +226,8 @@ Plug {
 		^new
 	}
 
-	findOutputChannel { |bundle, src|
-		var desc, msg, io;
+	findOutputChannel { |bundle, src, node|
+		var coll, desc, msg, io;
 		case
 		{ src.isSymbol or: { src.isString } } {
 			desc = SynthDescLib.at(source.asSymbol);
@@ -239,10 +239,20 @@ Plug {
 			// so the latest prep message should be for this function
 			// and, only one of them -- '.choose' is a LOL
 			// but OK for a single-element unordered collection
-			msg = bundle.preparationMessages.last;
-			if(msg[0] == \d_recv) {
-				desc = SynthDesc.readFile(CollStream(msg[1])).choose;
-			}
+
+			// this should always exist though
+			// because this is called after registering in SynthDefTracker
+			coll = SynthDefTracker.findCollFor(node, src);
+			if(coll.notNil and: { coll[\rate].notNil }) {
+				rate = coll[\rate];
+				numChannels = coll[\numCh];
+				// got answer from cache; leave 'desc' nil
+			} {
+				msg = bundle.preparationMessages.last;
+				if(msg[0] == \d_recv) {
+					desc = SynthDesc.readFile(CollStream(msg[1])).choose;
+				};
+			};
 		};
 		if(desc.notNil) {
 			io = desc.outputs.detect { |io|
@@ -251,6 +261,10 @@ Plug {
 			if(io.notNil) {
 				rate = io.rate;
 				numChannels = io.numberOfChannels;
+				if(coll.notNil) {
+					coll[\rate] = rate;
+					coll[\numCh] = numChannels;
+				};
 			};
 			synthDesc = desc;
 
@@ -1138,34 +1152,109 @@ Syn {
 
 // need to track client Syns and Plugs using an auto-generated synthdef
 SynthDefTracker {
-	// Dict: server -> defname (symbol) -> Set of clients
-	classvar all;
+	// new Dict: server -> function -> (synthdef: def, clients: IdentitySet)
+	classvar <all;
+	classvar <>timeout = 3;
 
 	*initClass {
 		all = IdentityDictionary.new;
 	}
 
-	*register { |object, defname|
-		var server = object.server;
-		if(all[server].isNil) {
-			all[server] = IdentityDictionary.new;
-		};
-		defname = defname.asSymbol;
-		if(all[server][defname].isNil) {
-			all[server][defname] = IdentitySet.new;
-		};
-		all[server][defname].add(object);
+	// 'object' should be a Node
+	*cache { |object, function|
+		var coll = this.findCollFor(object, function);
+		^if(coll.notNil) {
+			coll
+		}  // else nil
 	}
 
-	*release { |object, defname|
-		var set = all[object.server];
-		if(set.notNil) {
-			set = set[defname];
-			set.remove(object);
-			if(set.isEmpty) {
-				object.server.sendMsg(\d_free, defname);
-				all[object.server].removeAt(defname);
+	*register { |object, synthdef, function|
+		var server = object.server;
+		var coll = all[server];
+		var func;
+		if(coll.isNil) {
+			coll = IdentityDictionary.new;
+			all[server] = coll;
+		};
+		func = this.findEquivFunction(coll, function);
+		if(func.isNil) {
+			coll = IdentityDictionary[
+				\synthdef -> synthdef,
+				\lastChange -> 0.0,
+				\clients -> IdentitySet.new,
+				\timeAdded -> SystemClock.seconds
+			];
+			all[server][function] = coll;
+		} {
+			coll = all[server][func];
+		};
+		coll[\clients].add(object);
+		coll[\lastChange] = SystemClock.seconds;
+	}
+
+	*registerOutSpec { |object, function, rate, numChannels|
+		var coll = this.findCollFor(object, function);
+		if(coll.isNil) {
+			"Can't register output spec for non-registered function".warn;
+		} {
+			coll[\rate] = rate;
+			coll[\numCh] = numChannels;
+		}
+	}
+
+	*release { |object, defname, function|
+		var coll = all[object.server], func;
+		var set;
+		var releaseTime;
+		if(coll.notNil) {
+			func = this.findEquivFunction(coll, function);
+			if(func.notNil) {
+				coll = coll[func];
+				set = coll[\clients];
+				set.remove(object);
+				if(set.isEmpty) {
+					releaseTime = SystemClock.seconds;
+					SystemClock.sched(timeout, {
+						// if true, it means no nodes were registered for this synthdef
+						// since 'releaseTime' and we go ahead and delete the def
+						// if false, it means this def has been used in the interim
+						// so, invalidate this check and wait for the last-last check
+						if(coll[\lastChange] <= releaseTime) {
+							object.server.sendMsg(\d_free, coll[\synthdef].name.asSymbol);
+							all[object.server].removeAt(func);
+						};
+					});
+				};
 			};
 		};
+	}
+
+	// O(n) but what choice have I got? hash isn't useful here
+	// btw this is subtle:
+	// consider \xxxPlug, { |xxx| Plug { ... } }
+	// if the inner func directly uses xxx, then its 'context'
+	// will be unique per invocation, and the 'compareObject' will fail
+	// but if it's { |xxx| Plug({ |xxx| ... }, [xxx: xxx]) } as recommended,
+	// the inner func's 'context' will be shared and caching should work
+	*findEquivFunction { |coll, function|
+		if(coll.notNil) {
+			coll.keysDo { |func|
+				if(function.compareObject(func)) {
+					^func
+				}
+			};
+			^nil
+		};
+		^nil
+	}
+
+	*findCollFor { |object, function|
+		var coll = all[object.server];
+		var key;
+		^if(coll.notNil) {
+			key = this.findEquivFunction(coll, function);
+			if(key.notNil) { ^coll[key] }
+			// else nil
+		}  // else nil
 	}
 }
