@@ -593,7 +593,11 @@ Syn {
 		};
 		nodes.keysValuesDo { |id, msgs|
 			var args = Array(16);
-			msgs.do { |msg| args = args.addAll(msg[2..]) };  // perhaps an unsafe assumption
+			msgs.do { |msg|
+				(msg.size - 2).do { |i|
+					args = args.add(msg[i+2]);
+				};
+			};
 			bundle.add([15, id] ++ args);
 		};
 		^bundle
