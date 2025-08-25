@@ -261,6 +261,8 @@ Set controls in the Syn.
 
 A control input may receive a signal from another synth node. This synth node may itself have control inputs. These may be accessed using a path-style syntax: code::'freq/rate':: would set the rate parameter belonging to the Plug supplying the frequency to the main synth.
 
+note:: If a control is assigned a Plug, then code::.set:: can replace the plug with a new Plug, but it cannot remove the Plug and replace it with a fixed number. See link::#Setting controls:: and link::#Three-point modulation:: below. ::
+
 code::
 (
 SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
