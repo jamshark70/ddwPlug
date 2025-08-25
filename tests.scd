@@ -561,6 +561,8 @@ y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
 
 y.controls['freq/rate/rate'].keysValuesDo { |key, set| set.do { |plug| plug.node.postln } }; ""
 
+y.set(\freq, 100, 'freq/rate/rate', 2, 'freq/rate/high', 10, 'freq/rate', 5, 'freq/high', 1000);
+
 y.release;
 
 (
@@ -1843,6 +1845,9 @@ y = Syn(\default, [
 y.argAtPath('freq/rate');
 y.argAtPath('freq/rate/rate');
 
+// set multiple nodes at once
+y.set(\amp, 0.08, 'freq/rate/rate', 1.2, 'freq/rate/high', 25, 'freq/low', 100, 'freq/high', 350);
+
 Syn.browse
 
 y.controls
@@ -1855,3 +1860,20 @@ y.free;
 
 y.dump
 y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
+
+
+(
+y = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: 2, low: 200, high: 800]
+	),
+	amp: 0.05
+]);
+)
+
+y.set(\amp, 0.04, 'freq/rate', Plug(\freqlfo, [rate: 0.2, low: 1, high: 10]));
+
+y.set(\amp, 0.04, \freq, Plug { LFDNoise3.kr(100).exprange(10, 1000) });
+
+y.free;

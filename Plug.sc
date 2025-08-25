@@ -149,6 +149,7 @@ Plug {
 
 	server { ^dest.server }
 	group { ^dest.group }
+	asNodeID { ^node.nodeID }
 
 	set { |... args|
 		node.set(*args);
@@ -521,18 +522,23 @@ Syn {
 		};
 	}
 	makeSetBundle { |selector(\set), bundle(OSCBundle.new) ... argList|
+		var nodes = IdentityDictionary.new;
 		var doMap = { |map, key, value|
-			var i;
+			var i, msg;
 			map.keysValuesDo { |ctlname, set|
 				set.do { |object|
 					var old;
 					old = object.argAt(ctlname);
 					if(object !== this) {
-						bundle.add(object.perform(selector, ctlname, value));
+						nodes[object.asNodeID] = nodes[object.asNodeID].add(
+							object.perform(selector, ctlname, value)
+						);
 						// Plug 'set' gets updated in the plug object, not here
 						// so I don't need an updateArgs
 					} {
-						bundle.add(node.perform(selector, ctlname, value));
+						nodes[this.asNodeID] = nodes[this.asNodeID].add(
+							node.perform(selector, ctlname, value)
+						);
 						// btw this should be true only once b/c a Set can't have dupes
 						this.updateOneArg(ctlname, value);
 					};
@@ -584,6 +590,11 @@ Syn {
 			} {
 				doMapPlug.(key, value)
 			};
+		};
+		nodes.keysValuesDo { |id, msgs|
+			var args = Array(16);
+			msgs.do { |msg| args = args.addAll(msg[2..]) };  // perhaps an unsafe assumption
+			bundle.add([15, id] ++ args);
 		};
 		^bundle
 	}
@@ -793,6 +804,7 @@ Syn {
 	}
 
 	server { ^target.server }
+	asNodeID { ^node.nodeID }
 	dest { ^this }
 	bundleTarget { |predecessor, downstream|
 		^case
