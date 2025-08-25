@@ -10,6 +10,9 @@ s.volume = -20;
 
 s.volume = 0;
 
+s.mute;
+s.unmute;
+
 (
 SynthDef(\freqlfo, { |out, rate = 5, low = 200, high = 800|
 	Out.kr(out, LFDNoise3.kr(rate).exprange(low, high));
@@ -1812,3 +1815,43 @@ p = Pbind(
 )
 
 p.stop;
+
+
+
+// 25-0825 bug: `.set` may go too deep in the tree
+
+// 1. y.set(\freq, number), there's no controls[] map for \freq
+// I think because freq is a Plug -- but you should be able to set here
+
+// 2. 'freq/rate' flows down to the leaf node
+
+// Probably the same bug: \freq *tries* to flow down to a leaf,
+// but the leaves don't have a \freq input
+
+(
+y = Syn(\default, [
+	freq: Plug(
+		\freqlfo,
+		[rate: Plug(
+			\freqlfo, [rate: 0.7, low: 1, high: 70]
+		)]
+	),
+	amp: 0.05
+]);
+)
+
+y.argAtPath('freq/rate');
+y.argAtPath('freq/rate/rate');
+
+Syn.browse
+
+y.controls
+
+y.set(\amp, 0.01);  // addControl adds an entry here
+y.set(\freq, 100);  // addControl doesn't add an entry here
+y.set(\freq, Plug(\freqlfo, [rate: 100, low: 200, high: 800]));
+
+y.free;
+
+y.dump
+y.controls.keysValuesDo { |k, v| [k, v].postln }; ""
