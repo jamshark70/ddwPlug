@@ -807,6 +807,7 @@ Syn {
 		^obj
 	}
 
+	isPlaying { ^node.notNil }
 	server { ^target.server }
 	asNodeID { ^node.nodeID }
 	dest { ^this }
@@ -859,6 +860,23 @@ Syn {
 		if(node.notNil) {
 			bundle = bundle.add([15, node.nodeID, \gate, gate]);
 		};
+		^bundle
+	}
+
+	releaseMsg { |releaseTime = 0|
+		var bundle = OSCBundle.new;
+		if(releaseTime.notNil) {
+			if(releaseTime <= 0) {
+				releaseTime = -1
+			} {
+				releaseTime = (releaseTime + 1).neg
+			}
+		} {
+			releaseTime = 0;
+		};
+		bundle.add(#[error, -1]);
+		this.releaseToBundle(bundle, releaseTime);
+		bundle.add(#[error, -2]);
 		^bundle
 	}
 
