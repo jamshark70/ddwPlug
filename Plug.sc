@@ -715,10 +715,14 @@ Syn {
 			dict[name].add(object);
 		};
 
+		// [object, name, path].debug(">> addControl");
+
 		key = (path ++ [name]).join($/).asSymbol;
+		// key.debug("key");
 		if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
 
 		a = object.argAt(name);
+		// a.debug("argAt");
 		// have: this object, cname, path
 		// want: child plug and mapped cname
 		if(a.isKindOf(Plug)) {
@@ -727,27 +731,55 @@ Syn {
 				var obj = child, obj2;
 				var mapKey = name;
 				var cnames;
+				// child.debug("child loop");
 				while {
-					if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
-						mapKey = obj.map[mapKey];
+					if(obj.map/*.debug("obj.map")*/.notNil and: { obj.map[mapKey/*.debug("indexing")*/].notNil }) {
+						mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
 					};  // else use old mapKey
 					obj.controlNames.do { |cn|
+						// "recursive call".debug;
 						this.addControl(obj, cn, path ++ [name.asString]);
 					};
-					obj2 = obj.argAt(mapKey);
+					obj2 = obj.argAt(mapKey)/*.debug("obj2")*/;
 					obj2.isKindOf(Plug)
 				} {
 					obj = obj2;
 				};
 
-				cnames = obj.controlNames;
-				if(cnames.isNil or: { cnames.includes(mapKey) }) {
+				cnames = obj.controlNames/*.debug("cnames")*/;
+				if(cnames.isNil or: { cnames.includes(mapKey)/*.debug("cnames has mapKey")*/ }) {
+					// [controls[key], mapKey, object].debug("addTo (in child branch)");
 					addTo.(controls[key], mapKey, obj);
 				};
 			}.value(a);
 		} {
+			// [controls[key], name, object].debug("addTo");
 			addTo.(controls[key], name, object);
 		};
+
+		// look for sibling plugs with a map for the current control name
+		// probably should refactor too, this func is too long
+		// I'll test the recursive case later
+		object.concreteArgs/*.debug("check concreteArgs")*/.pairsDo { |name2, value|
+			var mapAt;
+			if(name2/*.debug("name2")*/ != name and: {
+				value.isKindOf(Plug) and: {
+					(mapAt = value.map.tryPerform(\at, name)).notNil
+				}
+			}) {
+				// "got sibling map, current status:".debug;
+				// [object, name, name2, value, mapAt].debug("obj, name, name2, value, mapAt");
+
+				// initialize the sibling's arg dictionary
+				// it's a sib so we don't have to change path
+				this.addControl(object, name2, path/*.drop(-1) ++ [name2.asString]*/);
+
+				// add map -- addTo automatically reuses IdentitySets when possible
+				addTo.(controls[key], mapAt, value);
+			};
+		};
+
+		// [object, name, path].debug("<< addControl");
 	}
 	invalidateControl { |path|
 		path = path.asString;
