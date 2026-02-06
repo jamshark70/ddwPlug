@@ -159,4 +159,10 @@
 			this[name] = this[name].add(object);
 		};
 	}
+	removeCleanup { |name, object|
+		this[name].remove(object);
+		if(this[name].tryPerform(\isEmpty) ?? { false }) {
+			this.removeAt(name);
+		};
+	}
 }

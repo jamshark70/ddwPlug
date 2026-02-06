@@ -705,7 +705,6 @@ Syn {
 	// * controls, dropped for now, too complicated and maybe not meaningful
 	// *name/subname --> that plug and all children
 	// *name --> everywhere
-	// this method needs refactoring, it's too large and complex
 	addControl { |object, name, path, prMaps(IdentityDictionary.new)|
 		var key;
 		var a;
@@ -722,31 +721,31 @@ Syn {
 			controls[key].addAt(name, object);
 		};
 
-		// look for sibling plugs with a map for the current control name
-		// probably should refactor too, this func is too long
-		// I'll test the recursive case later
-		object.concreteArgs/*.debug("check concreteArgs")*/.pairsDo { |name2, value|
+		// a Plug may 'map' a control name that differs from the Plug's own parameter
+		// i.e.: 3-point-modulation assumes e.g. that a Plug is assigned to ffreq
+		// and it may map ffreq from parent onto any name in its own control set.
+		// but the 'ffreq' Plug may also map 'freq' or any other parameter onto something
+		// in its own control set. This sibling check handles the latter case
+		object.concreteArgs.pairsDo { |name2, value|
 			var mapAt;
 			if(name2 != name and: {
 				value.isKindOf(Plug) and: {
 					(mapAt = value.map.tryPerform(\at, name)).notNil
 				}
 			}) {
-				prMaps.addAt(key, nil, IdentityDictionary);
-				prMaps[key].addAt(mapAt, value);
-
-				// add map -- addTo automatically reuses IdentitySets when possible
-				// this must happen first before the recursion
-				// because addControl will remove this in the case of chained maps
-				// key.debug("\n\naddto controls[key]");
-				controls[key].addAt(mapAt, value);
-
-				// initialize the sibling's arg dictionary
-				// it's a sib so we don't have to change path
-				this.addControl(object, name2, path, prMaps);
+				this.prHandleSiblingPlug(
+					name2, value, name, key, path, object, mapAt, prMaps
+				);
 			};
 		};
 	}
+	// if a parent level contains a Plug,
+	// this method scans through the tree,
+	// adding children's controls into the Syn-level control map
+	// 'obj.map' creates a link from a parent level control with one name
+	// to a child level control with the same or different name
+	// if these maps are chained, prMaps enables the logic here to detect that
+	// and 'jump' over a middle level
 	prScanPlugControls { |child, key, name, path, object, prMaps|
 		var obj = child, obj2;
 		var mapKey = name;
@@ -758,15 +757,15 @@ Syn {
 				prMaps[key].addAt(mapKey, obj);
 
 				// is there a map from any parent level?
+				// if yes, then we have A.a --> B.b --> C.c
+				// and future '.set' calls on 'a' should not overwrite b
+				// so we forward the new value to c, and delete the b mapping
 				// obj = child, object = parent
 				prMaps.keysValuesDo { |setKey, dict|
 					dict.keysValuesDo { |thisLevelName, set|
 						if(set.includes(object)) {
 							controls[setKey].addAt(mapKey, obj);
-							controls[setKey][name].remove(object);
-							if(controls[setKey][name].size == 0) {
-								controls[setKey].removeAt(name);
-							};
+							controls[setKey].removeCleanup(name, object);
 						}
 					}
 				};
@@ -784,6 +783,20 @@ Syn {
 		if(cnames.isNil or: { cnames.includes(mapKey) }) {
 			controls[key].addAt(mapKey, obj);
 		};
+	}
+	prHandleSiblingPlug { |name2, value, name, key, path, object, mapAt, prMaps|
+		prMaps.addAt(key, nil, IdentityDictionary);
+		prMaps[key].addAt(mapAt, value);
+
+		// add map -- addTo automatically reuses IdentitySets when possible
+		// this must happen first before the recursion
+		// because addControl will remove this in the case of chained maps
+		// key.debug("\n\naddto controls[key]");
+		controls[key].addAt(mapAt, value);
+
+		// initialize the sibling's arg dictionary
+		// it's a sib so we don't have to change path
+		this.addControl(object, name2, path, prMaps);
 	}
 
 	invalidateControl { |path|
