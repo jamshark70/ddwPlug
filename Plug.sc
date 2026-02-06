@@ -713,7 +713,6 @@ Syn {
 
 		key = (path ++ [name]).join($/).asSymbol;
 		// key.debug("key");
-		// if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
 		controls.addAt(key, nil, IdentityDictionary);
 
 		a = object.argAt(name);
@@ -721,56 +720,7 @@ Syn {
 		// have: this object, cname, path
 		// want: child plug and mapped cname
 		if(a.isKindOf(Plug)) {
-			// function is only to support inline vars
-			{ |child|  // this loop is always top-level
-				var obj = child, obj2;
-				var mapKey = name;
-				var cnames;
-				// [child, name].debug("child, name loop");
-				while {
-					if(obj.map/*.debug("obj.map")*/.notNil and: { obj.map[mapKey/*.debug("get map for")*/].notNil }) {
-						mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
-						prMaps.addAt(key, nil, IdentityDictionary);
-						// key.debug("\n\naddTo prMaps[key]");
-						prMaps[key].addAt(mapKey, obj);
-
-						// is there a map from any parent level?
-						// obj = child, object = parent
-						// [path, key, name, mapKey, obj, object].debug("check parent");
-						prMaps.keysValuesDo { |setKey, dict|
-							// [setKey, dict].debug("prMaps iteration");
-							dict.keysValuesDo { |thisLevelName, set|
-								if(set.includes(object)) {
-									// [setKey, controls[setKey], mapKey, obj].debug("addTo parent map");
-									// setKey.debug("\n\naddTo controls[setKey]");
-									controls[setKey].addAt(mapKey, obj);
-									// [setKey, controls[setKey], name, object].debug("removing");
-									controls[setKey][name].remove(object);
-									if(controls[setKey][name].size == 0) {
-										controls[setKey].removeAt(name);
-									};
-									// controls[setKey].debug("controls[setKey]");
-								}
-							}
-						};
-					};  // else use old mapKey
-					obj.controlNames.do { |cn|
-						// "recursive call".debug;
-						this.addControl(obj, cn, path ++ [name.asString], prMaps);
-					};
-					obj2 = obj.argAt(mapKey)/*.debug("obj2")*/;
-					obj2.isKindOf(Plug)
-				} {
-					obj = obj2;
-				};
-
-				cnames = obj.controlNames/*.debug("cnames")*/;
-				if(cnames.isNil or: { cnames.includes(mapKey)/*.debug("cnames has mapKey")*/ }) {
-					// [controls[key], mapKey, object].debug("addTo (in child branch)");
-					// key.debug("\n\naddto controls[key]");
-					controls[key].addAt(mapKey, obj);
-				};
-			}.value(a);
+			this.prScanPlugControls(a, key, name, path, object, prMaps);
 		} {
 			// [controls[key], name, object].debug("addTo");
 			// key.debug("\n\naddto controls[key]");
@@ -809,6 +759,56 @@ Syn {
 		// [object, name, path, prMaps].debug("<< addControl");
 		// "".debug;
 	}
+	prScanPlugControls { |child, key, name, path, object, prMaps|
+		var obj = child, obj2;
+		var mapKey = name;
+		var cnames;
+		// [child, name].debug("child, name loop");
+		while {
+			if(obj.map/*.debug("obj.map")*/.notNil and: { obj.map[mapKey/*.debug("get map for")*/].notNil }) {
+				mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
+				prMaps.addAt(key, nil, IdentityDictionary);
+				// key.debug("\n\naddTo prMaps[key]");
+				prMaps[key].addAt(mapKey, obj);
+
+				// is there a map from any parent level?
+				// obj = child, object = parent
+				// [path, key, name, mapKey, obj, object].debug("check parent");
+				prMaps.keysValuesDo { |setKey, dict|
+					// [setKey, dict].debug("prMaps iteration");
+					dict.keysValuesDo { |thisLevelName, set|
+						if(set.includes(object)) {
+							// [setKey, controls[setKey], mapKey, obj].debug("addTo parent map");
+							// setKey.debug("\n\naddTo controls[setKey]");
+							controls[setKey].addAt(mapKey, obj);
+							// [setKey, controls[setKey], name, object].debug("removing");
+							controls[setKey][name].remove(object);
+							if(controls[setKey][name].size == 0) {
+								controls[setKey].removeAt(name);
+							};
+							// controls[setKey].debug("controls[setKey]");
+						}
+					}
+				};
+			};  // else use old mapKey
+			obj.controlNames.do { |cn|
+				// "recursive call".debug;
+				this.addControl(obj, cn, path ++ [name.asString], prMaps);
+			};
+			obj2 = obj.argAt(mapKey)/*.debug("obj2")*/;
+			obj2.isKindOf(Plug)
+		} {
+			obj = obj2;
+		};
+
+		cnames = obj.controlNames/*.debug("cnames")*/;
+		if(cnames.isNil or: { cnames.includes(mapKey)/*.debug("cnames has mapKey")*/ }) {
+			// [controls[key], mapKey, object].debug("addTo (in child branch)");
+			// key.debug("\n\naddto controls[key]");
+			controls[key].addAt(mapKey, obj);
+		};
+	}
+
 	invalidateControl { |path|
 		path = path.asString;
 		if(controls.notNil) {
