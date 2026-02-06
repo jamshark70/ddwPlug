@@ -709,21 +709,16 @@ Syn {
 	addControl { |object, name, path, prMaps(IdentityDictionary.new)|
 		var key;
 		var a;
-		// [object, name, path, prMaps].debug(">> addControl");
 
 		key = (path ++ [name]).join($/).asSymbol;
-		// key.debug("key");
 		controls.addAt(key, nil, IdentityDictionary);
 
 		a = object.argAt(name);
-		// a.debug("argAt");
 		// have: this object, cname, path
 		// want: child plug and mapped cname
 		if(a.isKindOf(Plug)) {
 			this.prScanPlugControls(a, key, name, path, object, prMaps);
 		} {
-			// [controls[key], name, object].debug("addTo");
-			// key.debug("\n\naddto controls[key]");
 			controls[key].addAt(name, object);
 		};
 
@@ -732,16 +727,12 @@ Syn {
 		// I'll test the recursive case later
 		object.concreteArgs/*.debug("check concreteArgs")*/.pairsDo { |name2, value|
 			var mapAt;
-			if(name2/*.debug("name2")*/ != name and: {
+			if(name2 != name and: {
 				value.isKindOf(Plug) and: {
 					(mapAt = value.map.tryPerform(\at, name)).notNil
 				}
 			}) {
-				// "got sibling map, current status:".debug;
-				// [object, name, name2, value, mapAt].debug("obj, name, name2, value, mapAt");
-
 				prMaps.addAt(key, nil, IdentityDictionary);
-				// key.debug("\n\naddto prMaps[key]");
 				prMaps[key].addAt(mapAt, value);
 
 				// add map -- addTo automatically reuses IdentitySets when possible
@@ -752,59 +743,45 @@ Syn {
 
 				// initialize the sibling's arg dictionary
 				// it's a sib so we don't have to change path
-				this.addControl(object, name2, path/*.drop(-1) ++ [name2.asString]*/, prMaps);
+				this.addControl(object, name2, path, prMaps);
 			};
 		};
-
-		// [object, name, path, prMaps].debug("<< addControl");
-		// "".debug;
 	}
 	prScanPlugControls { |child, key, name, path, object, prMaps|
 		var obj = child, obj2;
 		var mapKey = name;
 		var cnames;
-		// [child, name].debug("child, name loop");
 		while {
-			if(obj.map/*.debug("obj.map")*/.notNil and: { obj.map[mapKey/*.debug("get map for")*/].notNil }) {
-				mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
+			if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
+				mapKey = obj.map[mapKey];
 				prMaps.addAt(key, nil, IdentityDictionary);
-				// key.debug("\n\naddTo prMaps[key]");
 				prMaps[key].addAt(mapKey, obj);
 
 				// is there a map from any parent level?
 				// obj = child, object = parent
-				// [path, key, name, mapKey, obj, object].debug("check parent");
 				prMaps.keysValuesDo { |setKey, dict|
-					// [setKey, dict].debug("prMaps iteration");
 					dict.keysValuesDo { |thisLevelName, set|
 						if(set.includes(object)) {
-							// [setKey, controls[setKey], mapKey, obj].debug("addTo parent map");
-							// setKey.debug("\n\naddTo controls[setKey]");
 							controls[setKey].addAt(mapKey, obj);
-							// [setKey, controls[setKey], name, object].debug("removing");
 							controls[setKey][name].remove(object);
 							if(controls[setKey][name].size == 0) {
 								controls[setKey].removeAt(name);
 							};
-							// controls[setKey].debug("controls[setKey]");
 						}
 					}
 				};
 			};  // else use old mapKey
 			obj.controlNames.do { |cn|
-				// "recursive call".debug;
 				this.addControl(obj, cn, path ++ [name.asString], prMaps);
 			};
-			obj2 = obj.argAt(mapKey)/*.debug("obj2")*/;
+			obj2 = obj.argAt(mapKey);
 			obj2.isKindOf(Plug)
 		} {
 			obj = obj2;
 		};
 
-		cnames = obj.controlNames/*.debug("cnames")*/;
-		if(cnames.isNil or: { cnames.includes(mapKey)/*.debug("cnames has mapKey")*/ }) {
-			// [controls[key], mapKey, object].debug("addTo (in child branch)");
-			// key.debug("\n\naddto controls[key]");
+		cnames = obj.controlNames;
+		if(cnames.isNil or: { cnames.includes(mapKey) }) {
 			controls[key].addAt(mapKey, obj);
 		};
 	}
