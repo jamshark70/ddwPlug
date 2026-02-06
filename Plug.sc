@@ -712,15 +712,6 @@ Syn {
 		var initTree = { |dict, name|
 			if(dict[name].isNil) { dict[name] = IdentityDictionary.new };
 		};
-		var addTo = { |dict, name, object|
-			// [dict, name, object].debug("ADDTO");
-			// "\n\n".debug;
-			if(dict[name].isNil) {
-				dict[name] = IdentitySet.new;
-			};
-			dict[name].add(object);
-		};
-
 		// [object, name, path, prMaps].debug(">> addControl");
 
 		key = (path ++ [name]).join($/).asSymbol;
@@ -744,7 +735,7 @@ Syn {
 						mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
 						initTree.(prMaps, key);
 						// key.debug("\n\naddTo prMaps[key]");
-						addTo.(prMaps[key], mapKey, obj);
+						prMaps[key].addAt(mapKey, obj);
 
 						// is there a map from any parent level?
 						// obj = child, object = parent
@@ -755,7 +746,7 @@ Syn {
 								if(set.includes(object)) {
 									// [setKey, controls[setKey], mapKey, obj].debug("addTo parent map");
 									// setKey.debug("\n\naddTo controls[setKey]");
-									addTo.(controls[setKey], mapKey, obj);
+									controls[setKey].addAt(mapKey, obj);
 									// [setKey, controls[setKey], name, object].debug("removing");
 									controls[setKey][name].remove(object);
 									if(controls[setKey][name].size == 0) {
@@ -780,13 +771,13 @@ Syn {
 				if(cnames.isNil or: { cnames.includes(mapKey)/*.debug("cnames has mapKey")*/ }) {
 					// [controls[key], mapKey, object].debug("addTo (in child branch)");
 					// key.debug("\n\naddto controls[key]");
-					addTo.(controls[key], mapKey, obj);
+					controls[key].addAt(mapKey, obj);
 				};
 			}.value(a);
 		} {
 			// [controls[key], name, object].debug("addTo");
 			// key.debug("\n\naddto controls[key]");
-			addTo.(controls[key], name, object);
+			controls[key].addAt(name, object);
 		};
 
 		// look for sibling plugs with a map for the current control name
@@ -804,13 +795,13 @@ Syn {
 
 				initTree.(prMaps, key);
 				// key.debug("\n\naddto prMaps[key]");
-				addTo.(prMaps[key], mapAt, value);
+				prMaps[key].addAt(mapAt, value);
 
 				// add map -- addTo automatically reuses IdentitySets when possible
 				// this must happen first before the recursion
 				// because addControl will remove this in the case of chained maps
 				// key.debug("\n\naddto controls[key]");
-				addTo.(controls[key], mapAt, value);
+				controls[key].addAt(mapAt, value);
 
 				// initialize the sibling's arg dictionary
 				// it's a sib so we don't have to change path

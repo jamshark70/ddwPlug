@@ -146,3 +146,15 @@
 	}
 	canMakePlug { ^true }
 }
+
+
+
+// other extensions for Syn/Plug support
++ Dictionary {
+	addAt { |name, object, class(IdentitySet)|
+		if(this[name].isNil) {
+			this[name] = class.new;
+		};
+		this[name] = this[name].add(object);
+	}
+}
