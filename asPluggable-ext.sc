@@ -155,6 +155,8 @@
 		if(this[name].isNil) {
 			this[name] = class.new;
 		};
-		this[name] = this[name].add(object);
+		if(object.notNil) {
+			this[name] = this[name].add(object);
+		};
 	}
 }

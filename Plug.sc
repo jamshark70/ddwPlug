@@ -709,15 +709,12 @@ Syn {
 	addControl { |object, name, path, prMaps(IdentityDictionary.new)|
 		var key;
 		var a;
-		var initTree = { |dict, name|
-			if(dict[name].isNil) { dict[name] = IdentityDictionary.new };
-		};
 		// [object, name, path, prMaps].debug(">> addControl");
 
 		key = (path ++ [name]).join($/).asSymbol;
 		// key.debug("key");
 		// if(controls[key].isNil) { controls[key] = IdentityDictionary.new };
-		initTree.(controls, key);
+		controls.addAt(key, nil, IdentityDictionary);
 
 		a = object.argAt(name);
 		// a.debug("argAt");
@@ -733,7 +730,7 @@ Syn {
 				while {
 					if(obj.map/*.debug("obj.map")*/.notNil and: { obj.map[mapKey/*.debug("get map for")*/].notNil }) {
 						mapKey = obj.map[mapKey]/*.debug("checked for mapKey")*/;
-						initTree.(prMaps, key);
+						prMaps.addAt(key, nil, IdentityDictionary);
 						// key.debug("\n\naddTo prMaps[key]");
 						prMaps[key].addAt(mapKey, obj);
 
@@ -793,7 +790,7 @@ Syn {
 				// "got sibling map, current status:".debug;
 				// [object, name, name2, value, mapAt].debug("obj, name, name2, value, mapAt");
 
-				initTree.(prMaps, key);
+				prMaps.addAt(key, nil, IdentityDictionary);
 				// key.debug("\n\naddto prMaps[key]");
 				prMaps[key].addAt(mapAt, value);
 
