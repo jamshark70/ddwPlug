@@ -836,3 +836,181 @@ x.set("freq", Plug {
 
 x.release;
 ::
+
+subsection:: More about Plug maps
+
+Plug's optional teletype::map:: argument should be a dictionary, where each entry associates a control name from the plug's parent (the Syn or Plug that contains this Plug) to a control name within the plug itself.
+
+That's rather abstract. Let's unpack a short example.
+
+code::
+(
+x = Syn(\default, [
+	freq: Plug({ |freq, mod, depth = 1.5|
+		freq * (depth ** LFDNoise3.kr(4))
+	}, [freq: 220])
+])
+)
+
+x.set(\freq, 440);
+
+x.release;
+::
+
+The function of the teletype::\freq:: Plug is to take the frequency from the parent Syn and modify it according to an LFO. Therefore, setting teletype::\freq:: on the Syn should actually modify the teletype::\freq:: input emphasis::of the Plug::. The effect will be that the audible note's frequency changes, without breaking the LFO structure.
+
+When you set a Syn control, the Syn builds a Dictionary associating parameter paths with control names and objects to be set. (code::.set:: may be a high traffic operation. If you are changing a parameter based on a GUI slider, there may be several dozen updates per second. It would be inefficient to analyze the object relationships every time; so instead, it scans the relationships the first time a control is set and caches them for future lookup.) In the above case, it detects that teletype::\freq:: in the Plug matches the control name to which the Plug is assigned; so the code::.set:: mapping for teletype::\freq:: becomes "Syn teletype::\freq:: controls teletype::\freq:: in the Plug."
+
+You might have created a more general LFO SynthDef that does not assume it's controlling frequency. In that case, the incoming parameter value may be considered a baseline. Now we can no longer rely on Syn to detect automatically that teletype::\base:: in the Plug matches teletype::\freq:: in the Syn. (How could it? With the names being different, there is no way to assume that they are related.) The Plug's teletype::map:: declares the relationship: "teletype::freq:: at the parent level corresponds to my own teletype::base::."
+
+code::
+(
+x = Syn(\default, [
+	freq: Plug(
+		{ |base, mod, depth = 1.5|
+			base * (depth ** LFDNoise3.kr(4))
+		},
+		[base: 220],
+		map: (freq: \base)
+	)
+])
+)
+
+x.set(\freq, 440);
+
+x.release;
+::
+
+Now the code::.set:: mapping dictionary says that the top level teletype::freq:: parameter name really controls teletype::base:: in the Plug.
+
+These two examples provide a little more background on some of the earlier examples. Now, to extend a bit further.
+
+As of early 2026, if Plugs are nested, their maps may be treated as a chain.
+
+code::
+(
+SynthDef(\modExp, { |out, base, mod, depth|
+    Out.kr(out, base * (depth ** mod));
+}).add;
+
+SynthDef(\lfdnoise3, { |out, rate = 1|
+	Out.kr(out, LFDNoise3.kr(rate))
+}).add;
+)
+
+(
+x = Syn(\default, [
+	freq: Plug(\modExp,
+		[
+			base: Plug(\modExp,
+				[
+					base: 220,
+					mod: Plug(\lfdnoise3, [rate: 12]),
+					depth: 1.15
+				],
+				// map: (base: \base)  // not needed bc names are the same!
+			),
+			mod: Plug(\lfdnoise3, [rate: 1]),
+			depth: 1.8
+		],
+		map: (freq: \base)
+	),
+	amp: 0.15
+]);
+)
+
+x.set(\freq, 440)
+
+x.free;
+::
+
+Here we have a Plug performing relatively narrow range fast modulation, feeding into another Plug whose modulation is slower and wider, and this provides the frequency for the main synth. When setting teletype::freq:: at the top level, the Syn recognizes that the real location for the baseline frequency is the innermost nested Plug. (In this example, it isn't necessary to declare the innermost map because the parameter names match. If they were different, you would simply declare a map at both levels.)
+
+Lastly, a concrete case I encountered (which was also the inspiration to implement nested maps) is the use of a Plug to raise a filter frequency when the note's frequency rises ("key tracking" in some synths).
+
+code::
+(
+SynthDef(\filterKeyTrack, { |out, ffreq = 1000, freq = 440, baseFreq = 220, ratio = 1.7|
+	var adjust = freq.log2 - baseFreq.log2;
+	Out.kr(out, (ffreq * (ratio ** adjust)).clip(20, 20000));
+}).add;
+
+SynthDef(\sawFilt, { |out, gate = 1, freq = 440, ffreq = 1000, rq = 0.8, amp = 0.5, detun = 1.008|
+	var sig = Saw.ar(freq * [1, detun]).sum;
+	sig = BLowPass4.ar(sig, ffreq, rq);
+	sig = sig * EnvGen.kr(Env.adsr(0.01, 0.3, 0.6, 0.1), gate, doneAction: 2);
+	Out.ar(out, (sig * amp).dup);
+}).add;
+)
+
+(
+x = Syn(\sawFilt, [
+	freq: 110,
+	ffreq: Plug(\filterKeyTrack, [
+		ffreq: 500,
+		// note: currently it is necessary
+		// to provide 'freq' in both places
+		freq: 110, baseFreq: 60
+	],
+	// note: map is needed because 'freq' is a *sibling* of 'ffreq'
+	map: (freq: \freq)
+	),
+	amp: 0.1
+]);
+)
+
+x.set(\freq, 800);
+
+x.free;
+::
+
+Correct behavior here is for the code::set:: statement to affect both the Syn and the teletype::ffreq:: Plug. When setting teletype::freq::, the Syn scans through the other parameters, looking for any Plugs containing a map for teletype::freq::. (This map must be declared explicitly, because the map source name teletype::freq:: does not match the Plug's parameter name teletype::ffreq::.) This plug's map declares that it has an interest in the parent level's frequency, so it creates a second target for setting the frequency. We can inspect (note: in normal usage, the teletype::controls:: dictionary is internal to Syn's functioning and should not be modified):
+
+code::
+x.controls[\freq];
+-> IdentityDictionary[(freq -> IdentitySet[Plug[6D2D671C], a Syn])]
+::
+
+... where this dictionary is stored under the key teletype::\freq::, meaning that it will be used when calling code::x.set(\freq, ...)::, and the dictionary's contents state that setting teletype::\freq:: on the Syn will affect the teletype::\freq:: parameter in both the Syn and the Plug. (The code teletype::6D2D671C:: is the Plug's hash, which will be different for every Plug instance. Without it being printed, there would be no good way to tell the difference between different Plugs.)
+
+The above key tracking example contains teletype::freq:: in four places, with two different meanings (Syn-level frequency and Plug-level frequency). Let's rewrite the example with different names for those two, to clarify the syntax.
+
+code::
+(
+SynthDef(\filterKeyTrack, { |out, ffreq = 1000, noteFreq = 440, baseFreq = 220, ratio = 1.7|
+	var adjust = noteFreq.log2 - baseFreq.log2;
+	Out.kr(out, (ffreq * (ratio ** adjust)).clip(20, 20000));
+}).add;
+
+SynthDef(\sawFilt, { |out, gate = 1, freq = 440, ffreq = 1000, rq = 0.8, amp = 0.5, detun = 1.008|
+	var sig = Saw.ar(freq * [1, detun]).sum;
+	sig = BLowPass4.ar(sig, ffreq, rq);
+	sig = sig * EnvGen.kr(Env.adsr(0.01, 0.3, 0.6, 0.1), gate, doneAction: 2);
+	Out.ar(out, (sig * amp).dup);
+}).add;
+)
+
+(
+x = Syn(\sawFilt, [
+	freq: 110,
+	ffreq: Plug(\filterKeyTrack,
+		[
+			ffreq: 500,
+			noteFreq: 110, baseFreq: 60
+		],
+		map: (freq: \noteFreq)
+	),
+	amp: 0.1
+]);
+)
+
+x.set(\freq, 800);
+
+x.controls[\freq]
+
+x.free;
+::
+
+The Syn's argument list uses control names from its own SynthDef (teletype::\sawFilt::), including teletype::freq::; the Plug's argument list likewise refers to its own SynthDef (teletype::\filterKeyTrack::, which declares teletype::noteFreq::). In the Plug's teletype::map::, the order is important: parent-level name first (teletype::freq::), pointing to the child-level name (teletype::noteFreq::).
+
+As an experiment, you can try commenting out the teletype::map:: line, to see what happens to the filter key tracking when the map doesn't exist. We are setting the note's frequency to be higher than the filter frequency. Without the map, the key tracking synth does not receive the new note frequency, so the filter frequency does not adjust and the sound is relatively weak. With the map, the note frequency changes in both places causing the filter frequency to rise with the note.
