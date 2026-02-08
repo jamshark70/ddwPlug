@@ -705,98 +705,83 @@ Syn {
 	// * controls, dropped for now, too complicated and maybe not meaningful
 	// *name/subname --> that plug and all children
 	// *name --> everywhere
-	addControl { |object, name, path, prMaps(IdentityDictionary.new)|
-		var key;
-		var a;
-
-		key = (path ++ [name]).join($/).asSymbol;
-		controls.addAt(key, nil, IdentityDictionary);
-
-		a = object.argAt(name);
-		// have: this object, cname, path
-		// want: child plug and mapped cname
-		if(a.isKindOf(Plug)) {
-			this.prScanPlugControls(a, key, name, path, object, prMaps);
-		} {
-			controls[key].addAt(name, object);
+	// object: Syn or Plug
+	// name: the control name within this object
+	// path: the arg path to the object (not including name)
+	addControl { |object, name, path, prMaps|
+		var key = (path ++ [name]).join($/).asSymbol;
+		var mapKey;
+		var a, childPath;
+		// become aware of any name-change or sibling maps
+		if(prMaps.isNil) {
+			prMaps = this.scanMaps(object, name, path);
 		};
 
-		// a Plug may 'map' a control name that differs from the Plug's own parameter
-		// i.e.: 3-point-modulation assumes e.g. that a Plug is assigned to ffreq
-		// and it may map ffreq from parent onto any name in its own control set.
-		// but the 'ffreq' Plug may also map 'freq' or any other parameter onto something
-		// in its own control set. This sibling check handles the latter case
+		// add the control itself
+		// prMaps should already contain sibling relationships,
+		// so we shouldn't need to do anything special here
+		mapKey = prMaps.followControlPathLinks(key);
+		controls.addAt(key, nil, IdentityDictionary);  // init tree branch if needed
+		mapKey.do { |mpk|
+			// mpk is a full path to the target arg
+			// controls entries should key off of the arg name to set
+			controls[key].addAt(mpk.asString.basename.asSymbol, this.objectForPath(mpk))
+		};
+
+		// walk the tree and cache setKey -> (controlName -> object) relationships
+		a = object.argAt(key);
+		if(a.isKindOf(Plug)) {
+			// do all child control names
+			childPath = path ++ [name];
+			a.controlNames.do { |cn|
+				this.addControl(a, cn, childPath, prMaps);
+			};
+		};
+	}
+	scanMaps { |object, name, path, prMaps(IdentityDictionary.new)|
+		var a = object.argAt(name);
+		var mapName = name;
+		var childPath;
+		var makeKey = { |path, name| (path ++ [name]).join($/).asSymbol };
+		if(a.isKindOf(Plug)) {
+			childPath = path ++ [name];
+			// two relevant cases:
+			// 1. a has a map matching 'name'
+			// 2. a has a control matching 'name' (map should override this)
+			case
+			{ mapName = a.map.tryPerform(\at, name); mapName.notNil } {
+				prMaps.addAt(makeKey.(path, name), makeKey.(childPath, mapName));
+			}
+			// chain without changing name
+			{ a.controlNames.tryPerform(\includes, name) ?? { false } } {
+				prMaps.addAt(makeKey.(path, name), makeKey.(childPath, name));
+			};
+
+			a.controlNames.do { |cn|
+				// remember that cn is the name *within 'a'* to examine
+				// a should **NOT** be the arg value that cn points to!
+				this.scanMaps(a, cn, childPath, prMaps);
+			};
+		};
+
+		// and sibling check
 		object.concreteArgs.pairsDo { |name2, value|
-			var mapAt;
+			var mapAt, key, childPath;
 			if(name2 != name and: {
 				value.isKindOf(Plug) and: {
-					(mapAt = value.map.tryPerform(\at, name)).notNil
+					// looking for a Plug whose map contains the parent-level param = name
+					mapAt = value.map.tryPerform(\at, name);
+					mapAt.notNil
 				}
 			}) {
-				this.prHandleSiblingPlug(
-					name2, value, name, key, path, object, mapAt, prMaps
-				);
+				key = makeKey.(path, name);
+				prMaps.addAt(key, key);
+				childPath = path ++ [name2];
+				prMaps.addAt(key, makeKey.(childPath, mapAt));
+				this.scanMaps(value, mapAt, childPath, prMaps);
 			};
 		};
-	}
-	// if a parent level contains a Plug,
-	// this method scans through the tree,
-	// adding children's controls into the Syn-level control map
-	// 'obj.map' creates a link from a parent level control with one name
-	// to a child level control with the same or different name
-	// if these maps are chained, prMaps enables the logic here to detect that
-	// and 'jump' over a middle level
-	prScanPlugControls { |child, key, name, path, object, prMaps|
-		var obj = child, obj2;
-		var mapKey = name;
-		var cnames;
-		while {
-			if(obj.map.notNil and: { obj.map[mapKey].notNil }) {
-				mapKey = obj.map[mapKey];
-				prMaps.addAt(key, nil, IdentityDictionary);
-				prMaps[key].addAt(mapKey, obj);
-
-				// is there a map from any parent level?
-				// if yes, then we have A.a --> B.b --> C.c
-				// and future '.set' calls on 'a' should not overwrite b
-				// so we forward the new value to c, and delete the b mapping
-				// obj = child, object = parent
-				prMaps.keysValuesDo { |setKey, dict|
-					dict.keysValuesDo { |thisLevelName, set|
-						if(set.includes(object)) {
-							controls[setKey].addAt(mapKey, obj);
-							controls[setKey].removeCleanup(name, object);
-						}
-					}
-				};
-			};  // else use old mapKey
-			obj.controlNames.do { |cn|
-				this.addControl(obj, cn, path ++ [name.asString], prMaps);
-			};
-			obj2 = obj.argAt(mapKey);
-			obj2.isKindOf(Plug)
-		} {
-			obj = obj2;
-		};
-
-		cnames = obj.controlNames;
-		if(cnames.isNil or: { cnames.includes(mapKey) }) {
-			controls[key].addAt(mapKey, obj);
-		};
-	}
-	prHandleSiblingPlug { |name2, value, name, key, path, object, mapAt, prMaps|
-		prMaps.addAt(key, nil, IdentityDictionary);
-		prMaps[key].addAt(mapAt, value);
-
-		// add map -- addTo automatically reuses IdentitySets when possible
-		// this must happen first before the recursion
-		// because addControl will remove this in the case of chained maps
-		// key.debug("\n\naddto controls[key]");
-		controls[key].addAt(mapAt, value);
-
-		// initialize the sibling's arg dictionary
-		// it's a sib so we don't have to change path
-		this.addControl(object, name2, path, prMaps);
+		^prMaps
 	}
 
 	invalidateControl { |path|
