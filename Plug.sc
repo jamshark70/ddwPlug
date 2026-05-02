@@ -101,12 +101,7 @@ Plug : AbstractPatchableNode {
 	group { ^dest.group }
 	asNodeID { ^node.nodeID }
 
-	set { |... args|
-		node.set(*args);
-	}
-	setn { |... args|
-		node.setn(*args);
-	}
+	// not to remove
 	setMsg { |... args|
 		this.updateArgs(args);
 		^node.setMsg(*args);
@@ -115,39 +110,10 @@ Plug : AbstractPatchableNode {
 		this.updateArgs(args);
 		^node.setnMsg(*args);
 	}
-	updateOneArg { |key, value|
-		var i;
-		if(argLookup.notNil) {
-			argLookup[key] = value;
-		};
-		i = args.tryPerform(\indexOf, key);
-		if(i.notNil) {
-			args[i + 1] = value;
-		} {
-			args = args.add(key).add(value);
-		};
-		i = concreteArgs.tryPerform(\indexOf, key);
-		if(i.notNil) {
-			concreteArgs[i + 1] = value;
-		} {
-			i = concreteArgs.size - 4;
-			concreteArgs = concreteArgs.insert(i, value).insert(i, key);
-		};
-	}
-	updateArgs { |setArgs|
-		var i;
-		setArgs.pairsDo { |key, value|
-			this.updateOneArg(key, value)
-		}
-	}
 
-	addControl {
-	}
-
-	scanMaps {
-	}
-
-	scanSiblingMaps {
+	appendConcreteArg { |key, value|
+		var i = concreteArgs.size - 4;
+		concreteArgs = concreteArgs.insert(i, value).insert(i, key);
 	}
 
 	setSourceTarget {
@@ -158,7 +124,7 @@ Plug : AbstractPatchableNode {
 			// if this has no predecessor, then it's the first Plug
 			// so the referent is the plug's old node
 			[node, \addBefore]
-		};
+		}
 	}
 
 	setPlugToBundle { |key, plug, bundle(OSCBundle.new)|
@@ -206,23 +172,6 @@ Plug : AbstractPatchableNode {
 
 	printOn { |stream|
 		stream << this.class.name << "[" << this.hash.asHexString(8) << "]";
-	}
-
-	initArgLookup { |args|
-		argLookup = IdentityDictionary.new;
-		args.pairsDo { |key, value|
-			// keys is an array but all elements should be the same
-			argLookup.put(key, value);
-		};
-	}
-	argAt { |key|
-		if(argLookup.isNil) {
-			this.initArgLookup(concreteArgs);
-		};
-		^argLookup[key]
-	}
-	controlNames {
-		^if(synthDesc.notNil) { synthDesc.controlNames }
 	}
 
 	canMakePlug { ^true }

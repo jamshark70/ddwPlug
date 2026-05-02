@@ -149,3 +149,50 @@ SynthDefTracker {
 		}  // else nil
 	}
 }
+
+// takes over some of the scanMaps logic
+ControlNameMap {
+	var <maps;  // flat dictionary of paths relative to 'this' node
+
+	*new { |maps(IdentityDictionary.new)|
+		^super.newCopyArgs(maps)
+	}
+
+	// when the parent receives a ControlNameMap object,
+	// it should prefix everything with the name of the Plug it came from
+	// the Plug doesn't know, but the parent does
+	// this is the real reason for this class
+	prepend { |name|
+		var newMap;
+		newMap = maps.class.new;
+		maps.keysValuesDo { |key, value|
+			newMap.put((name ++ "/" ++ key).asSymbol,
+				value.collect { |x| (name ++ "/" ++ x).asSymbol }
+			)
+		};
+		^this.class.new(newMap)
+	}
+
+	followControlPathLinks { |key, result(IdentitySet.new)|
+		// not-found entries are assumed to map to their own location
+		if(maps[key].isNil) {
+			result.add(key)
+		} {
+			maps[key].do { |linkedKey|
+				if(linkedKey == key) {
+					result.add(key)
+				} {
+					this.followControlPathLinks(linkedKey, result)
+				}
+			}
+		};
+		^if(result.isEmpty) { key } { result }
+	}
+
+	addAt { |name, object, dict, class(IdentitySet)|
+		maps.addAt(name, object, class)
+	}
+	merge { |aControlMap|
+		maps.putAll(aControlMap.maps)
+	}
+}

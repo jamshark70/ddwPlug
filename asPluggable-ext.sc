@@ -148,7 +148,6 @@
 }
 
 
-
 // other extensions for Syn/Plug support
 + Dictionary {
 	addAt { |name, object, class(IdentitySet)|
@@ -158,26 +157,5 @@
 		if(object.notNil) {
 			this[name] = this[name].add(object);
 		};
-	}
-	removeCleanup { |name, object|
-		this[name].remove(object);
-		if(this[name].tryPerform(\isEmpty) ?? { false }) {
-			this.removeAt(name);
-		};
-	}
-	followControlPathLinks { |key, result(IdentitySet.new)|
-		// not-found entries are assumed to map to their own location
-		if(this[key].isNil) {
-			result.add(key)
-		} {
-			this[key].do { |linkedKey|
-				if(linkedKey == key) {
-					result.add(key)
-				} {
-					this.followControlPathLinks(linkedKey, result)
-				}
-			}
-		};
-		^if(result.isEmpty) { key } { result }
 	}
 }
