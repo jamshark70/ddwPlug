@@ -36,6 +36,7 @@ Syn : AbstractPatchableNode {
 		args = aArgs;
 		target = aTarget;
 		addAction = aAddAction;
+		controls = IdentityDictionary.new;
 	}
 
 	*flatArgsToDict { |argList|
@@ -103,19 +104,11 @@ Syn : AbstractPatchableNode {
 			bundle.add(group.newMsg(target, addAction));
 		};
 
-		// node = Synth.basicNew(defName, target.server);
-		// bundle.add(node.newMsg(group, argList, \addToTail));
-		// question for later: this is now basically just like Plug
-		// so do we even need a top-level object?
+		// array wrapper is for consistency with 'preparePlug...' methods
+		concreteArgs = args.asOSCPlugArray(this.dest, this, bundle);
 
-		controls = IdentityDictionary.new;
+		this.prepareSource(bundle);
 
-		concreteArgs = args.asOSCPlugArray(this, this, bundle);
-
-		// maybe need to refactor this
-		// all types of sources should flatten to a 'defName'?
-		node = source.preparePlugSource(this, bundle, concreteArgs);
-		this.getSynthDesc(bundle);
 		source.preparePlugBundle(
 			this, bundle, concreteArgs.asOSCArgArray,
 			*this.bundleTarget
@@ -124,31 +117,34 @@ Syn : AbstractPatchableNode {
 		^bundle
 	}
 
-	setSourceToBundle { |src, bundle(OSCBundle.new)|
-		if(synthDesc.notNil and: { synthDesc.hasGate }) {
-			bundle.add(node.releaseMsg)
-		} {
-			bundle.add(node.freeMsg)
-		};
-		node = src.preparePlugSource(this, bundle, concreteArgs);
-		// ^^ so that the above call serves as the validation
-		// if you pass in a wrong object, that will barf without breaking the Syn instance
-		source = src;
-		this.getSynthDesc(bundle);
-		source.preparePlugBundle(
-			// here, Plugs should already have been concrete-ized
-			// so this should just write bus-mapping symbols into
-			// the array and *not* re-prepare any synths
-			this, bundle, concreteArgs.asOSCArgArray,
-			*this.bundleTarget
-		);
-		^bundle
+	// setSourceToBundle { |src, bundle(OSCBundle.new)|
+	// 	if(synthDesc.notNil and: { synthDesc.hasGate }) {
+	// 		bundle.add(node.releaseMsg)
+	// 	} {
+	// 		bundle.add(node.freeMsg)
+	// 	};
+	// 	node = src.preparePlugSource(this, bundle, concreteArgs);
+	// 	// ^^ so that the above call serves as the validation
+	// 	// if you pass in a wrong object, that will barf without breaking the Syn instance
+	// 	source = src;
+	// 	this.getSynthDesc(bundle);
+	// 	source.preparePlugBundle(
+	// 		// here, Plugs should already have been concrete-ized
+	// 		// so this should just write bus-mapping symbols into
+	// 		// the array and *not* re-prepare any synths
+	// 		this, bundle, concreteArgs/*.asOSCArgArray*/,
+	// 		*this.bundleTarget
+	// 	);
+	// 	^bundle
+	// }
+	setSourceTarget {
+		^[node, \addBefore]
 	}
-	source_ { |src, latency|
-		var bundle = OSCBundle.new;
-		this.setSourceToBundle(src, bundle);
-		this.sendBundle(bundle, latency)
-	}
+	// source_ { |src, latency|
+	// 	var bundle = OSCBundle.new;
+	// 	this.setSourceToBundle(src, bundle);
+	// 	this.sendBundle(bundle, latency)
+	// }
 
 	sendBundle { |bundle, latency|
 		bundle.sendOnTime(target.server, latency);
@@ -533,12 +529,6 @@ Syn : AbstractPatchableNode {
 			[target, addAction]
 		}
 	}
-	rate { ^\audio }
-
-	free { |latency ... why|
-		this.freeToBundle.sendOnTime(this.server, latency);
-		this.didFree(*why);
-	}
 
 	freeToBundle { |bundle(OSCBundle.new)|
 		if(group.notNil) {
@@ -580,10 +570,6 @@ Syn : AbstractPatchableNode {
 		this.releaseToBundle(bundle, releaseTime);
 		bundle.add(#[error, -2]);
 		^bundle
-	}
-
-	didFree { |... why|
-		this.changed(\didFree, *why);
 	}
 
 	// assumes already freed

@@ -1,6 +1,7 @@
 /* gplv3 hjh */
 
 // some confusion about lastPlug vs predecessor
+// 'dest' may need rethinking; does a nested Plug really need to know the owner Syn?
 
 AbstractPatchableNode {
 	classvar <>useGroup = false;
@@ -12,6 +13,89 @@ AbstractPatchableNode {
 	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 	var <synthDesc;
+
+	free { |latency ... why|
+		this.freeToBundle.sendOnTime(this.server, latency);
+		this.didFree(*why);
+	}
+	didFree { |... why|
+		this.changed(\didFree, *why);
+	}
+
+	prepareSource { |bundle, argSource(source)|
+		// preparation messages, bundle messages
+		// preparePlugSource gives one node per concreteArgs entry
+		node = argSource.preparePlugSource(this, bundle, concreteArgs);
+		// bundle is a sneaky way to extract a Function's def
+		// though probably inadequate for some future requirement
+		this.findOutputChannel(bundle, argSource, node);
+	}
+
+	source_ { |src, latency|
+		var bundle = this.setSourceToBundle(src);
+		bundle.sendOnTime(this.server, latency);
+	}
+	setSourceToBundle { |src, bundle(OSCBundle.new)|
+		var oldNode = node, oldDesc = synthDesc;
+		var target, addAction;
+		// note, this must precede prepareSource!
+		#target, addAction = this.setSourceTarget;
+		// btw this call overwrites properties, which is not really ideal
+		this.prepareSource(bundle, src);
+		src.preparePlugBundle(this, bundle, concreteArgs, target, addAction);
+		if(oldDesc.notNil and: { oldDesc.hasGate }) {
+			bundle.add(oldNode.releaseMsg)
+		} {
+			bundle.add(oldNode.freeMsg)
+		};
+		source = src;
+		^bundle
+	}
+
+	findOutputChannel { |bundle, src, node|
+		var coll, desc, msg, io;
+		case
+		{ src.isSymbol or: { src.isString } } {
+			desc = SynthDescLib.at(source.asSymbol);
+		}
+		{ src.isFunction } {
+			// oops, must communicate def back to here
+			// I'm gonna try something naughty though
+			// this is being called immediately after preparePlugSource
+			// so the latest prep message should be for this function
+			// and, only one of them -- '.choose' is a LOL
+			// but OK for a single-element unordered collection
+
+			// this should always exist though
+			// because this is called after registering in SynthDefTracker
+			coll = SynthDefTracker.findCollFor(node, src);
+			if(coll.notNil and: { coll[\rate].notNil }) {
+				rate = coll[\rate];
+				numChannels = coll[\numCh];
+				// got answer from cache; leave 'desc' nil
+			} {
+				msg = bundle.preparationMessages.last;
+				if(msg[0] == \d_recv) {
+					desc = SynthDesc.readFile(CollStream(msg[1])).choose;
+				};
+			};
+		};
+		if(desc.notNil) {
+			io = desc.outputs.detect { |io|
+				#[out, i_out].includes(io.startingChannel)
+			};
+			if(io.notNil) {
+				rate = io.rate;
+				numChannels = io.numberOfChannels;
+				if(coll.notNil) {
+					coll[\rate] = rate;
+					coll[\numCh] = numChannels;
+				};
+			};
+			synthDesc = desc;
+		};  // else don't touch the user's rate / numChannels
+	}
+
 
 	*initClass {
 		StartUp.add {

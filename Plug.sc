@@ -35,6 +35,8 @@ Plug : AbstractPatchableNode {
 		^this.new.init(source, args, rate, numChannels, map, true)
 	}
 
+	// Plug, at *new time, only sets its parameters
+	// see asPluggable below for the rest of the process
 	init { |aSource, aArgs, aRate, aNumChannels, aMap, aConcrete = false|
 		source = aSource;
 		args = aArgs;
@@ -42,13 +44,11 @@ Plug : AbstractPatchableNode {
 		numChannels = aNumChannels;
 		map = aMap;
 		isConcrete = aConcrete ?? { false };
+		controls = IdentityDictionary.new;
 		antecedents = IdentitySet.new;
 		descendants = IdentitySet.new;
 	}
 
-	free { |latency|
-		this.freeToBundle.sendOnTime(this.server, latency)
-	}
 	freeToBundle { |bundle(OSCBundle.new)|
 		if(node.notNil) {
 			bundle.add([\error, -1])
@@ -63,7 +63,6 @@ Plug : AbstractPatchableNode {
 		this.changed(\didFree, \plugFreed);
 		antecedents.do { |plug| plug.descendants.remove(this) };
 		descendants.do { |plug| plug.antecedents.remove(this) };
-		// nodes.do { |node| node.removeDependant(this) };
 		^bundle
 	}
 
@@ -73,15 +72,9 @@ Plug : AbstractPatchableNode {
 			descendants.add(downstream);
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
-				// only one synth per plug, for now
 				// array wrapper is for consistency with 'preparePlug...' methods
-				concreteArgs = args.asOSCPlugArray(dest, this, bundle);
-				// preparation messages, bundle messages
-				// preparePlugSource gives one node per concreteArgs entry
-				node = source.preparePlugSource(this, bundle, concreteArgs);
-				// bundle is a sneaky way to extract a Function's def
-				// though probably inadequate for some future requirement
-				this.findOutputChannel(bundle, source, node);
+				concreteArgs = args.asOSCPlugArray(this.dest, this, bundle);
+				this.prepareSource(bundle);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
 				concreteArgs = concreteArgs ++ [out: bus, i_out: bus];
 				source.preparePlugBundle(
@@ -157,33 +150,15 @@ Plug : AbstractPatchableNode {
 	scanSiblingMaps {
 	}
 
-	setSourceToBundle { |src, bundle(OSCBundle.new)|
-		var oldNode = node, oldDesc = synthDesc;
-		var target, addAction;
-		node = src.preparePlugSource(this, bundle, concreteArgs);
-		if(predecessor.notNil) {
-			target = predecessor.node;  // must be a Plug, only one node
-			addAction = \addAfter;
+	setSourceTarget {
+		^if(predecessor.notNil) {
+			// must be a Plug, only one node
+			[predecessor.node, \addAfter]
 		} {
 			// if this has no predecessor, then it's the first Plug
 			// so the referent is the plug's old node
-			target = oldNode;
-			addAction = \addBefore;
+			[node, \addBefore]
 		};
-		src.preparePlugBundle(this, bundle, concreteArgs, target, addAction);
-		// btw this call overwrites properties, which is not really good
-		this.findOutputChannel(bundle, src);
-		if(oldDesc.notNil and: { oldDesc.hasGate }) {
-			bundle.add(oldNode.releaseMsg)
-		} {
-			bundle.add(oldNode.freeMsg)
-		};
-		source = src;
-		^bundle
-	}
-	source_ { |src, latency|
-		var bundle = this.setSourceToBundle(src);
-		bundle.sendOnTime(this.server, latency);
 	}
 
 	setPlugToBundle { |key, plug, bundle(OSCBundle.new)|
@@ -191,57 +166,6 @@ Plug : AbstractPatchableNode {
 		this.updateArgs([key, new]);
 		bundle.add(node.setMsg(key, new.asMap));
 		^new
-	}
-
-	findOutputChannel { |bundle, src, node|
-		var coll, desc, msg, io;
-		case
-		{ src.isSymbol or: { src.isString } } {
-			desc = SynthDescLib.at(source.asSymbol);
-		}
-		{ src.isFunction } {
-			// oops, must communicate def back to here
-			// I'm gonna try something naughty though
-			// this is being called immediately after preparePlugSource
-			// so the latest prep message should be for this function
-			// and, only one of them -- '.choose' is a LOL
-			// but OK for a single-element unordered collection
-
-			// this should always exist though
-			// because this is called after registering in SynthDefTracker
-			coll = SynthDefTracker.findCollFor(node, src);
-			if(coll.notNil and: { coll[\rate].notNil }) {
-				rate = coll[\rate];
-				numChannels = coll[\numCh];
-				// got answer from cache; leave 'desc' nil
-			} {
-				msg = bundle.preparationMessages.last;
-				if(msg[0] == \d_recv) {
-					desc = SynthDesc.readFile(CollStream(msg[1])).choose;
-				};
-			};
-		};
-		if(desc.notNil) {
-			io = desc.outputs.detect { |io|
-				#[out, i_out].includes(io.startingChannel)
-			};
-			if(io.notNil) {
-				rate = io.rate;
-				numChannels = io.numberOfChannels;
-				if(coll.notNil) {
-					coll[\rate] = rate;
-					coll[\numCh] = numChannels;
-				};
-			};
-			synthDesc = desc;
-
-			// // also slightly cheating, but I have the def here, so...
-			// // desc.debug("adding controls for desc");
-			// // dest.controls.proto[\path].debug("path is currently");
-			// desc.controls.do { |cn|
-			// 	dest.addControl(this, cn.name);
-			// };
-		};  // else don't touch the user's rate / numChannels
 	}
 
 	asMap {
@@ -261,7 +185,8 @@ Plug : AbstractPatchableNode {
 	asControlInput { ^this.asMap }
 
 	concreteInstance {
-		^this.class.new(source, args, rate, numChannels, map).prConcrete_(true)
+		// ('shared' happens to set the concrete flag)
+		^this.class.shared(source, args, rate, numChannels, map)
 	}
 
 	prConcrete_ { |bool(false)|
