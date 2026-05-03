@@ -21,6 +21,21 @@ AbstractPatchableNode {
 		this.changed(\didFree, *why);
 	}
 
+	// 'free' support -- see Plug and Syn for removeDescendant
+	removeAntecedent { |plug|
+		var newArgs = Array(concreteArgs.size);
+		antecedents.remove(plug);
+		concreteArgs.pairsDo { |key, value|
+			if(value === plug) {
+				this.invalidateControl(key, plug);
+				argLookup.removeAt(key);
+			} {
+				newArgs.add(key).add(value);
+			};
+		};
+		concreteArgs = newArgs;
+	}
+
 	prepareSource { |bundle, argSource(source)|
 		// preparation messages, bundle messages
 		// preparePlugSource gives one node per concreteArgs entry
@@ -280,14 +295,26 @@ AbstractPatchableNode {
 		^mapping
 	}
 
-	invalidateControl { |path|
+	// example: (abc -> plug1) --> (def -> plug2) --> Syn
+	// plug1 is freed. So any 'abc' entries in plug2's controls need to be removed
+	// also any 'def/abc' entries in the Syn are invalid
+	invalidateControl { |path, object|
 		path = path.asString;
 		if(controls.notNil) {
+			// 'keysDo' is used intentionally to avoid problems
+			// with mutating the collection that I'm iterating over
 			controls.keysDo { |key|
-				if(key.asString.beginsWith(path)) {
+				if(key.asString.beginsWith(path) or: {
+					controls[key].any { |objects| objects.includes(object) }
+				}) {
 					controls.removeAt(key)
 				}
-			}
+			};
+			descendants.do { |downstream|
+				downstream.namesForValue(this).do { |key|
+					downstream.invalidateControl(key ++ "/" ++ path, object);
+				};
+			};
 		}
 	}
 	initArgLookup { |args|
@@ -314,6 +341,16 @@ AbstractPatchableNode {
 			obj = value;
 		};
 		^obj
+	}
+	// non-recursive
+	namesForValue { |object|
+		var result = IdentitySet.new;
+		concreteArgs.keysValuesDo { |key, value|
+			if(value === object) {
+				result.add(key)
+			}
+		};
+		^result
 	}
 
 	updateOneArg { |key, value|

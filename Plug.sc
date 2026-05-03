@@ -61,10 +61,23 @@ Plug : AbstractPatchableNode {
 		// dest.removeDependant(this);
 		descendants.do(_.removeDependant(this));  // not sure this is needed?
 		this.changed(\didFree, \plugFreed);
-		antecedents.do { |plug| plug.descendants.remove(this) };
-		descendants.do { |plug| plug.antecedents.remove(this) };
+		antecedents.do { |plug| plug.removeDescendant(this) };
+		descendants.do { |plug| plug.removeAntecedent(this) };
 		^bundle
 	}
+	// for removeDescendant, 'this' must be a Plug,
+	// since a Syn by definition has no descendants
+	// once a Plug has lost all its downstream targets, no need to keep it
+	removeDescendant { |plug, bundle(OSCBundle.new)|
+		descendants.remove(plug);
+		// the case is: plug1 --> plug2 --> syn
+		// if plug2 is freed, plug1 has nowhere to go,
+		// so it should disappear too
+		if(descendants.isEmpty) {
+			this.freeToBundle(bundle)
+		};
+	}
+
 
 	asPluggable { |argDest, downstream, bundle|
 		if(isConcrete) {

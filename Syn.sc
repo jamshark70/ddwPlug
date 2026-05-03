@@ -37,6 +37,8 @@ Syn : AbstractPatchableNode {
 		target = aTarget;
 		addAction = aAddAction;
 		controls = IdentityDictionary.new;
+		antecedents = IdentitySet.new;
+		descendants = IdentitySet.new;
 	}
 
 	*flatArgsToDict { |argList|
@@ -97,8 +99,6 @@ Syn : AbstractPatchableNode {
 	}
 
 	prepareToBundle { |bundle(OSCBundle.new)|
-		if(antecedents.isNil) { antecedents = IdentitySet.new };
-
 		if(useGroup) {
 			group = Group.basicNew(target.server);  // note, children can get this from 'dest'
 			bundle.add(group.newMsg(target, addAction));
@@ -256,6 +256,8 @@ Syn : AbstractPatchableNode {
 		group = node = nil;
 		^bundle
 	}
+	// a Syn by definition has no descendants
+	removeDescendant {}
 
 	release { |latency, gate = 0|
 		this.releaseToBundle(nil, gate).sendOnTime(this.server, latency)
