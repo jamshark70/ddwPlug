@@ -222,16 +222,16 @@ Syn : AbstractPatchableNode {
 	dest { ^this }
 
 	// I'm not sure how to factor this better
-	bundleTarget { |predecessor, downstream|
+	// cases:
+	// - initial creation: downstream exists but its node does not (fall back to lastPlug)
+	// - set(..., Plug): Uses downstream
+	bundleTarget { |downstream|
 		^case
 		// esp. for adding Plugs by '.set'
 		// predecessor would have been set as lastPlug but that may not be valid
 		// but the plug does know its downstream
 		{ downstream.notNil and: { downstream.node.notNil } } {
 			[downstream.node, \addBefore]
-		}
-		{ predecessor.notNil } {
-			[predecessor.node, \addAfter]  // predecessor can only be a Plug, single-node
 		}
 		{ group.notNil } {
 			[group, \addToTail]

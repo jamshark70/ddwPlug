@@ -24,7 +24,6 @@ Plug : AbstractPatchableNode {
 	var <>map;
 	var <dest;
 	var <bus;  // use AutoReleaseBus
-	var <predecessor;
 	var <isConcrete = false;
 
 	*new { |source, args, rate = \control, numChannels = 1, map|
@@ -86,6 +85,8 @@ Plug : AbstractPatchableNode {
 			downstream.antecedents.add(this);
 			if(bus.isNil) {
 				// array wrapper is for consistency with 'preparePlug...' methods
+				// in here, a Plug (or other "pluggable") may be encountered
+				// then 'this' is its downstream
 				concreteArgs = args.asOSCPlugArray(this.dest, this, bundle);
 				this.prepareSource(bundle);
 				bus = AutoReleaseBus.perform(rate, dest.server, numChannels);
@@ -94,9 +95,8 @@ Plug : AbstractPatchableNode {
 					this,
 					bundle,
 					concreteArgs.asOSCArgArray,
-					*dest.bundleTarget(predecessor, downstream)
+					*dest.bundleTarget(downstream)
 				);
-				predecessor = dest.lastPlug;
 				dest.lastPlug = this;  // only set if this time made a node
 			};
 
@@ -130,14 +130,7 @@ Plug : AbstractPatchableNode {
 	}
 
 	setSourceTarget {
-		^if(predecessor.notNil) {
-			// must be a Plug, only one node
-			[predecessor.node, \addAfter]
-		} {
-			// if this has no predecessor, then it's the first Plug
-			// so the referent is the plug's old node
-			[node, \addBefore]
-		}
+		^[node, \addBefore]
 	}
 
 	setPlugToBundle { |key, plug, bundle(OSCBundle.new)|
