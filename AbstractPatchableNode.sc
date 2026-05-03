@@ -44,6 +44,23 @@ AbstractPatchableNode {
 		this.findOutputChannel(bundle, argSource, node);
 	}
 
+	// return a Synth (as a target)
+	// width-first search (and it has to be)
+	searchDownstreamNode {
+		var n = descendants.detect { |desc|
+			desc.node.notNil
+		};
+		if(n.isNil) {
+			descendants.do { |desc|
+				n = desc.searchDownstreamNode;
+				if(n.notNil) { ^n.node }
+			};
+			^nil
+		} {
+			^n.node
+		};
+	}
+
 	source_ { |src, latency|
 		var bundle = this.setSourceToBundle(src);
 		bundle.sendOnTime(this.server, latency);

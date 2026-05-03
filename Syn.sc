@@ -227,10 +227,20 @@ Syn : AbstractPatchableNode {
 	// - source_ doesn't use this method at all
 	// - set(..., Plug): Uses downstream
 	bundleTarget { |downstream, bundle|
+		var n;
+		if(downstream.notNil) {
+			if(downstream.node.isNil) {
+				// if you .set() a nested Plug, the immediate downstream isn't there
+				// so we keep looking down as many levels of descendants as needed
+				n = downstream.searchDownstreamNode;
+				if(n.notNil) {
+					^[n, \addBefore]
+				};
+			} {
+				^[downstream.node, \addBefore]
+			};
+		};
 		^case
-		{ downstream.notNil and: { downstream.node.notNil } } {
-			[downstream.node, \addBefore]
-		}
 		{ group.notNil } {
 			[group, \addToTail]
 		}
