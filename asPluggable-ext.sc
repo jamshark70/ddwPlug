@@ -81,6 +81,9 @@
 		preparationMessages.do { |msg| "prep: %\n".postf(msg) };
 		messages.do { |msg| "msg: %\n".postf(msg) };
 	}
+
+	isEmpty { ^messages.size <= 0 }
+	notEmpty { ^messages.size > 0 }
 }
 
 

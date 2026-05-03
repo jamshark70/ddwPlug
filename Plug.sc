@@ -95,9 +95,8 @@ Plug : AbstractPatchableNode {
 					this,
 					bundle,
 					concreteArgs.asOSCArgArray,
-					*dest.bundleTarget(downstream)
+					*dest.bundleTarget(downstream, bundle)
 				);
-				dest.lastPlug = this;  // only set if this time made a node
 			};
 
 			// these are all Sets so multiple adds are OK (no redundancy)

@@ -9,7 +9,6 @@ AbstractPatchableNode {
 	var <node, <group, watcher;
 	var <concreteArgs, argLookup;
 	var <antecedents, <descendants;
-	var <>lastPlug;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 	var <synthDesc;
 

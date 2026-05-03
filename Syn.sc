@@ -111,7 +111,7 @@ Syn : AbstractPatchableNode {
 
 		source.preparePlugBundle(
 			this, bundle, concreteArgs.asOSCArgArray,
-			*this.bundleTarget
+			*this.bundleTarget(nil, bundle)
 		);
 
 		^bundle
@@ -221,24 +221,30 @@ Syn : AbstractPatchableNode {
 	asNodeID { ^node.nodeID }
 	dest { ^this }
 
-	// I'm not sure how to factor this better
 	// cases:
-	// - initial creation: downstream exists but its node does not (fall back to lastPlug)
+	// - useGroup == true: Always tail of the local group
+	// - initial creation: downstream exists but its node does not (fall back to bundle)
+	// - source_ doesn't use this method at all
 	// - set(..., Plug): Uses downstream
-	bundleTarget { |downstream|
+	bundleTarget { |downstream, bundle|
 		^case
-		// esp. for adding Plugs by '.set'
-		// predecessor would have been set as lastPlug but that may not be valid
-		// but the plug does know its downstream
 		{ downstream.notNil and: { downstream.node.notNil } } {
 			[downstream.node, \addBefore]
 		}
 		{ group.notNil } {
 			[group, \addToTail]
 		}
-		{ lastPlug.notNil } {
-			[lastPlug.node, \addAfter]
-		} {
+		// I had been tracking this with a variable 'lastPlug'
+		// for use during initial creation, when downstream nodes don't exist yet
+		// but then realized, the last created node ID exists in the bundle
+		{ bundle.notEmpty } {
+			[bundle.messages.last[2], \addAfter]
+		}
+		// first node to be created (innermost Plug)
+		// should be relative to the user's choice of target
+		// (note, I can't move this method out of Syn because
+		// of these variable references; Plug should not have them)
+		{
 			[target, addAction]
 		}
 	}
