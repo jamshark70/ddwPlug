@@ -71,6 +71,7 @@ SynthDefTracker {
 		if(func.isNil) {
 			coll = IdentityDictionary[
 				\synthdef -> synthdef,
+				\synthdesc -> synthdef.asSynthDesc,
 				\lastChange -> 0.0,
 				\clients -> IdentitySet.new,
 				\timeAdded -> SystemClock.seconds

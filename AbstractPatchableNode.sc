@@ -99,11 +99,15 @@ AbstractPatchableNode {
 			// this should always exist though
 			// because this is called after registering in SynthDefTracker
 			coll = SynthDefTracker.findCollFor(node, src);
-			if(coll.notNil and: { coll[\rate].notNil }) {
-				rate = coll[\rate];
-				numChannels = coll[\numCh];
-				// got answer from cache; leave 'desc' nil
-			} {
+			if(coll.notNil) {
+				if(coll[\rate].notNil) {
+					rate = coll[\rate];
+					numChannels = coll[\numCh];
+				};
+				desc = coll[\synthdesc];
+			};
+			// fallback in case cache failed (shouldn't happen)
+			if(desc.isNil) {
 				msg = bundle.preparationMessages.last;
 				if(msg[0] == \d_recv) {
 					desc = SynthDesc.readFile(CollStream(msg[1])).choose;
@@ -111,15 +115,18 @@ AbstractPatchableNode {
 			};
 		};
 		if(desc.notNil) {
-			io = desc.outputs.detect { |io|
-				#[out, i_out].includes(io.startingChannel)
-			};
-			if(io.notNil) {
-				rate = io.rate;
-				numChannels = io.numberOfChannels;
-				if(coll.notNil) {
-					coll[\rate] = rate;
-					coll[\numCh] = numChannels;
+			if(rate.isNil) {
+				io = desc.outputs.detect { |io|
+					#[out, i_out].includes(io.startingChannel)
+				};
+				if(io.notNil) {
+					rate = io.rate;
+					numChannels = io.numberOfChannels;
+					if(coll.notNil) {
+						coll[\rate] = rate;
+						coll[\numCh] = numChannels;
+						coll[\synthdesc] = desc;
+					};
 				};
 			};
 			synthDesc = desc;
