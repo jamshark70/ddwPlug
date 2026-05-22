@@ -127,10 +127,18 @@ AbstractPatchableNode {
 						coll[\numCh] = numChannels;
 						coll[\synthdesc] = desc;
 					};
+				} {
+					// if no rate was set and no io can be found,
+					// use default
+					this.setDefaultRate;
 				};
 			};
 			synthDesc = desc;
-		};  // else don't touch the user's rate / numChannels
+		} {
+			if(rate.isNil) {
+				this.setDefaultRate
+			};  // else don't touch the user's rate / numChannels
+		};
 	}
 
 	makeSetBundle { |selector(\set), bundle(OSCBundle.new) ... argList|

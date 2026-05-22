@@ -10,8 +10,6 @@
 // only non-plug controls
 
 Syn : AbstractPatchableNode {
-	// make sure to set rate and numChannels -- findOutputChannel should do
-
 	var <>target, <>addAction;
 
 	*new { |source, args, target(Server.default.defaultGroup), addAction(\addToTail), latency|
@@ -220,6 +218,11 @@ Syn : AbstractPatchableNode {
 	server { ^target.server }
 	asNodeID { ^node.nodeID }
 	dest { ^this }
+
+	setDefaultRate {
+		rate = \audio;
+		numChannels = 2;
+	}
 
 	// cases:
 	// - useGroup == true: Always tail of the local group

@@ -26,11 +26,11 @@ Plug : AbstractPatchableNode {
 	var <bus;  // use AutoReleaseBus
 	var <isConcrete = false;
 
-	*new { |source, args, rate = \control, numChannels = 1, map|
+	*new { |source, args, rate, numChannels, map|
 		^super.new.init(source, args, rate, numChannels, map)
 	}
 
-	*shared { |source, args, rate = \control, numChannels = 1, map|
+	*shared { |source, args, rate, numChannels, map|
 		^this.new.init(source, args, rate, numChannels, map, true)
 	}
 
@@ -112,6 +112,11 @@ Plug : AbstractPatchableNode {
 	server { ^dest.server }
 	group { ^dest.group }
 	asNodeID { ^node.nodeID }
+
+	setDefaultRate {
+		rate = \control;
+		numChannels = 1;
+	}
 
 	// not to remove
 	setMsg { |... args|
