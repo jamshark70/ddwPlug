@@ -13,6 +13,9 @@ AbstractPatchableNode {
 	var <synthDesc;
 
 	free { |latency ... why|
+		// note: I had assumed that '.oneShot' would free the watcher, if any
+		// but this did not happen in all cases
+		watcher.free;
 		this.freeToBundle.sendOnTime(this.server, latency);
 		this.didFree(*why);
 	}

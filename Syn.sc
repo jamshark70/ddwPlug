@@ -138,6 +138,7 @@ Syn : AbstractPatchableNode {
 			};
 		}, '/n_end', target.server.addr, argTemplate: [node.nodeID])
 		// needs to survive cmd-.
+		// because, if the node ended by cmd-., the Syn still needs to clean up
 		.fix.oneShot;
 	}
 
