@@ -284,6 +284,10 @@ AbstractPatchableNode {
 			// 1. a has a map matching 'name'
 			//    'name' is my (parent's) controlname; mapName is child's
 			// 2. a has a control matching 'name' (map should override this)
+			// if 'a' has a control that is not Plug-ged, then we don't handle it
+			// here; that is handled in addControl
+			// so this 'case' only handles Plugs where a parent-level name
+			// maps onto a Plug's control
 			case
 			{ mapName = a.map.tryPerform(\at, name); mapName.notNil } {
 				mapping.addAt(name, (name ++ "/" ++ mapName).asSymbol);
