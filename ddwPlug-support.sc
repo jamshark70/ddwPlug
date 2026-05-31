@@ -196,4 +196,11 @@ ControlNameMap {
 	merge { |aControlMap|
 		maps.putAll(aControlMap.maps)
 	}
+
+	printOn { |stream|
+		stream << this.class.name << "[" << maps << "]"
+	}
+	storeOn { |stream|
+		stream << this.class.name << "[" <<< maps << "]"
+	}
 }
