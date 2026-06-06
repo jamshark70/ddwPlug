@@ -110,16 +110,26 @@
 
 + Function {
 	preparePlugSource { |dest, bundle, argList|
-		var fadeTime = if(dest.rate == \audio, 0.1, nil);
 		var def;
-		var node;
 		// 'dest' is for the Server object
 		def = SynthDefTracker.cache(dest, this);
 		if(def.isNil) {
-			def = this.asSynthDef(
-				fadeTime: fadeTime,
-				name: ("plugDef" ++ UniqueID.next).asSymbol
-			);
+			// In GraphBuilder:wrapOut, it's hard to override only the envelope behavior...
+			def = SynthDef(("plugDef" ++ UniqueID.next).asSymbol, { |i_out = 0|
+				var result, rate;
+				var gate, fadeTime;
+				result = SynthDef.wrap(this).asUGenInput;
+				rate = result.rate;
+				if(rate == \audio and: { UGen.buildSynthDef.canReleaseSynth.not }) {
+					gate = NamedControl.kr(\gate, 1);
+					fadeTime = NamedControl.kr(\fadeTime, 0.02);
+					result = result * EnvGen.kr(
+						Env([fadeTime < 0, 1, 0], [fadeTime, fadeTime], releaseNode: 1),
+						gate, doneAction: 2
+					);
+				};
+				Out.perform(UGen.methodSelectorForRate(rate), i_out, result);
+			});
 			// only add prep message if it's a new synthdef
 			bundle.addPrepare([\d_recv, def.asBytes]);
 		} {
