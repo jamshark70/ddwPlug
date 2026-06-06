@@ -154,49 +154,73 @@ Syn : AbstractPatchableNode {
 		^out
  	}
 
-	moveToHead { |group|
+	moveToHead { |aGroup|
 		var prev;
-		this.allNodes.do { |n|
-			if(prev.isNil) {
-				n.moveToHead(group);
-			} {
-				n.moveAfter(prev);
+		if(group.notNil) {
+			group.moveToHead(aGroup)
+		} {
+			this.allNodes.do { |n|
+				if(prev.isNil) {
+					n.moveToHead(aGroup);
+				} {
+					n.moveAfter(prev);
+				};
+				prev = n;
 			};
-			prev = n;
 		};
+		target = aGroup;
+		addAction = \addToHead;
 	}
-	moveToTail { |group|
+	moveToTail { |aGroup|
 		var prev;
-		this.allNodes.do { |n|
-			if(prev.isNil) {
-				n.moveToTail(group);
-			} {
-				n.moveAfter(prev);
+		if(group.notNil) {
+			group.moveToTail(aGroup)
+		} {
+			this.allNodes.do { |n|
+				if(prev.isNil) {
+					n.moveToTail(aGroup);
+				} {
+					n.moveAfter(prev);
+				};
+				prev = n;
 			};
-			prev = n;
 		};
+		target = aGroup;
+		addAction = \addToTail;
 	}
 	moveBefore { |aNode|
 		var prev;
-		this.allNodes.do { |n|
-			if(prev.isNil) {
-				n.moveBefore(aNode);
-			} {
-				n.moveAfter(prev);
+		if(group.notNil) {
+			group.moveBefore(aNode)
+		} {
+			this.allNodes.do { |n|
+				if(prev.isNil) {
+					n.moveBefore(aNode);
+				} {
+					n.moveAfter(prev);
+				};
+				prev = n;
 			};
-			prev = n;
 		};
+		target = aNode;
+		addAction = \addBefore;
 	}
 	moveAfter { |aNode|
 		var prev;
-		this.allNodes.do { |n|
-			if(prev.isNil) {
-				n.moveAfter(aNode);
-			} {
-				n.moveAfter(prev);
+		if(group.notNil) {
+			group.moveAfter(aNode)
+		} {
+			this.allNodes.do { |n|
+				if(prev.isNil) {
+					n.moveAfter(aNode);
+				} {
+					n.moveAfter(prev);
+				};
+				prev = n;
 			};
-			prev = n;
 		};
+		target = aNode;
+		addAction = \addAfter;
 	}
 	allNodes {
 		var nodes = LinkedList.new;

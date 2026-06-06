@@ -338,13 +338,13 @@ subsection:: Ordering
 METHOD:: moveToHead
 Behaves like link::Classes/Node#-moveToHead::.
 
-ARGUMENT:: group
+ARGUMENT:: aGroup
 
 
 METHOD:: moveToTail
 Behaves like link::Classes/Node#-moveToTail::.
 
-ARGUMENT:: group
+ARGUMENT:: aGroup
 
 
 METHOD:: moveBefore
