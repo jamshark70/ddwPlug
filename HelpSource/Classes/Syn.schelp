@@ -213,7 +213,7 @@ Server messaging latency defining the time when the sound should hit the speaker
 
 subsection:: Control
 
-The following methods use a plain link::Classes/List:: for bundling. 
+The following methods use a plain link::Classes/List:: for bundling.
 
 METHOD:: release
 As in link::Classes/Synth#-release::, send gate-set messages to cause sustaining envelopes to release. When the primary node(s) are removed, Syn will also release auxiliary resources.
@@ -735,7 +735,7 @@ note:: link::Classes/Pmono:: and link::Classes/PmonoArtic:: require a wrapper ob
 
 subsection:: NRT (Non-Real-Time)
 
-The NRT interface at this point is not especially convenient, but it is possible to use code::xxxToBundle:: methods to capture OSC messaging, and at the messages one by one into a link::Classes/Score::.
+The NRT interface at this point is not especially convenient, but it is possible to use code::xxxToBundle:: methods to capture OSC messaging, and add the messages one by one into a link::Classes/Score::.
 
 note:: After releasing a Syn, always link::#-cleanupToBundle:: and add the messages after the node's envelope release time. In real time use, this cleanup is performed automatically when the Syn node ends. In NRT, there is no existing node to track. It then becomes your responsibility to know how long your Syn will take to release, and do the cleanup yourself. (If this is not done, then OSCFunc and object dependencies will accumulate, eventually slowing down the sclang interpreter.) ::
 
