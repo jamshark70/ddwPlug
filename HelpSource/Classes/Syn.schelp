@@ -35,7 +35,7 @@ s.queryAllNodes;
 
 NODE TREE Group 0
    1 group
-      1000 971719531
+      1000 plugDef1006
       1001 default
 
 a.release;
@@ -53,7 +53,7 @@ code::
 Syn.useGroup = true;
 ::
 
-With this option enabled, each Syn will create its own Group (not ParGroup!) to maintain processing order. Syn Groups may be placed into a ParGroup for parallel processing.
+With this option enabled, each Syn will create its own container Group (not ParGroup!) to maintain processing order. Container Groups may be placed into a ParGroup for parallel processing.
 
 
 subsection:: Events
@@ -172,7 +172,7 @@ returns:: An idle Syn instance.
 
 
 METHOD:: useGroup
-If true, each Syn will place its nodes into a dedicated group. If false, nodes go directly into the parent group. Default is false.
+If true, each Syn will place its nodes into a dedicated group (code::container::). If false, nodes go directly into the parent group. Default is false.
 
 PRIVATE:: initClass
 
@@ -435,7 +435,36 @@ The top-level synth node.
 returns:: A Synth node.
 
 METHOD:: group
-If group-style node ordering has been chosen, this is the Syn's dedicated Group.
+The group in which the entire Syn complex exists (for compatibility with Synth). This is not the code::useGroup == true:: container group! If useGroup is enabled, then code::group:: returns the group where the container group is located. See example below.
+
+METHOD:: container
+If group-style node ordering has been chosen, this is the Syn's dedicated Group, else nil. Because it can be nil, you should not rely on direct access to this group.
+
+code::
+a = Synth(\default);
+a.group;  // Group(1) = default group
+
+a.free;
+
+a = Syn(\default);
+a.group;  // Group(1) = default group
+
+a.free;
+
+Syn.useGroup = true;
+a = Syn(\default);
+a.group;  // Group(1) = default group
+a.container;  // Group(1002) is within Group(1)
+
+s.queryAllNodes;
+NODE TREE Group 0
+   1 group              -- '.group' (where the whole Syn lives)
+      1002 group        -- '.container'
+         1003 default   -- '.node'
+::
+
+METHOD:: asTarget
+Returns a Node against which other Nodes or Syns may be created. If useGroup == false, asTarget returns code::this.node::; if true, it returns code::this.container::. (Compatible with link::Reference/asTarget::.)
 
 METHOD:: antecedents
 An IdentitySet of Plugs feeding into the main synth node. (These Plugs may themselves have antecedents -- that is, you can use the antecedents collections to iterate over the entire tree.)

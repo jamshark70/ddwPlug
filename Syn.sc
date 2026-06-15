@@ -98,8 +98,8 @@ Syn : AbstractPatchableNode {
 
 	prepareToBundle { |bundle(OSCBundle.new)|
 		if(useGroup) {
-			group = Group.basicNew(target.server);  // note, children can get this from 'dest'
-			bundle.add(group.newMsg(target, addAction));
+			container = Group.basicNew(target.server);  // note, children can get this from 'dest'
+			bundle.add(container.newMsg(target, addAction));
 		};
 
 		// array wrapper is for consistency with 'preparePlug...' methods
@@ -156,8 +156,8 @@ Syn : AbstractPatchableNode {
 
 	moveToHead { |aGroup|
 		var prev;
-		if(group.notNil) {
-			group.moveToHead(aGroup)
+		if(container.notNil) {
+			container.moveToHead(aGroup)
 		} {
 			this.allNodes.do { |n|
 				if(prev.isNil) {
@@ -173,8 +173,8 @@ Syn : AbstractPatchableNode {
 	}
 	moveToTail { |aGroup|
 		var prev;
-		if(group.notNil) {
-			group.moveToTail(aGroup)
+		if(container.notNil) {
+			container.moveToTail(aGroup)
 		} {
 			this.allNodes.do { |n|
 				if(prev.isNil) {
@@ -190,8 +190,8 @@ Syn : AbstractPatchableNode {
 	}
 	moveBefore { |aNode|
 		var prev;
-		if(group.notNil) {
-			group.moveBefore(aNode)
+		if(container.notNil) {
+			container.moveBefore(aNode)
 		} {
 			this.allNodes.do { |n|
 				if(prev.isNil) {
@@ -207,8 +207,8 @@ Syn : AbstractPatchableNode {
 	}
 	moveAfter { |aNode|
 		var prev;
-		if(group.notNil) {
-			group.moveAfter(aNode)
+		if(container.notNil) {
+			container.moveAfter(aNode)
 		} {
 			this.allNodes.do { |n|
 				if(prev.isNil) {
@@ -242,6 +242,8 @@ Syn : AbstractPatchableNode {
 	isPlaying { ^node.notNil }
 	server { ^target.server }
 	asNodeID { ^node.nodeID }
+	asTarget { ^if(container.notNil) { container } { node } }
+	group { ^target }
 	dest { ^this }
 
 	setDefaultRate {
@@ -269,8 +271,8 @@ Syn : AbstractPatchableNode {
 			};
 		};
 		^case
-		{ group.notNil } {
-			[group, \addToTail]
+		{ container.notNil } {
+			[container, \addToTail]
 		}
 		// I had been tracking this with a variable 'lastPlug'
 		// for use during initial creation, when downstream nodes don't exist yet
@@ -288,8 +290,8 @@ Syn : AbstractPatchableNode {
 	}
 
 	freeToBundle { |bundle(OSCBundle.new)|
-		if(group.notNil) {
-			bundle.add([11, group.nodeID])
+		if(container.notNil) {
+			bundle.add([11, container.nodeID])
 		} {
 			if(node.notNil) {
 				bundle.add([error: -1])
@@ -297,7 +299,7 @@ Syn : AbstractPatchableNode {
 				.add([error: -2])
 			}
 		};
-		group = node = nil;
+		container = node = nil;
 		^bundle
 	}
 	// a Syn by definition has no descendants

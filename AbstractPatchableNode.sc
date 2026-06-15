@@ -6,7 +6,7 @@ AbstractPatchableNode {
 	classvar <>useGroup = false;
 
 	var <source, <>args, <rate, <numChannels;
-	var <node, <group, watcher;
+	var <node, <container, watcher;
 	var <concreteArgs, argLookup;
 	var <antecedents, <descendants;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
