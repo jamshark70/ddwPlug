@@ -633,7 +633,27 @@ AbstractPatchableNode {
 			// ~syn should be an array of Syns
 			Event.addEventType(\synSet, { |server|
 				var freqs, bndl;
+				var latency = ~latency ?? { server.latency };
 				var syn = ~syn.asArray;
+				var findPlug = { |key, value|
+					var plugKey = (key ++ "Plug").asSymbol;
+					var plug = plugKey.envirGet;
+					if(plug.canMakePlug) {
+						plug.dereference.valueEnvir(value)
+					} {
+						value
+					}
+				};
+				// code duplication: SynVoicerNode:setMsg
+				var compareSource = { |a, b|
+					if(a.class != b.class) {  // btw 'a' should always be a Plug
+						false
+					} {
+						switch(a.source.class)
+						{ Function } { a.source.compareObject(b.source) }
+						{ a == b }
+					}
+				};
 
 				freqs = ~freq = ~freq.value;
 				~server = server;
@@ -641,10 +661,33 @@ AbstractPatchableNode {
 				bndl = ~args.envirPairs.flop;
 
 				bndl.do { |args, i|
-					~schedBundleArray.value(~lag, ~timingOffset, server,
-						syn.wrapAt(i).setToBundle(nil, *args).messages,
-						~latency
-					);
+					// preprocess:
+					// look for "...Plug" args
+					// verify whether Plugs need to replace or keep source
+					// doing this separately for each syn
+					var ar = Array(args.size);
+					var oneBundle;
+					args.pairsDo { |key, value|
+						var oldPlug;
+						value = findPlug.(key, value);
+						if(value.isKindOf(Plug)) {
+							oldPlug = syn.wrapAt(i).argAtPath(key);
+							if(compareSource.(value, oldPlug)) {
+								// no, don't: this triggers the pass-through behavior
+								currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
+									ar = ar.add(k).add(
+										if(v.isArray) { v.wrapAt(i) } { v }
+									);
+								});
+							} {
+								ar = ar.add(key).add(value);
+							};
+						} {
+							ar = ar.add(key).add(value);
+						};
+					};
+					syn.wrapAt(i).setToBundle(nil, *ar)
+					.sendOnTime(server, latency + ~lag + (~timingOffset / thisThread.clock.tempo))
 				};
 			});
 

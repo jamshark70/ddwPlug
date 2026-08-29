@@ -171,4 +171,12 @@
 			this[name] = this[name].add(object);
 		};
 	}
+	doForPrefix { |prefix, func|
+		prefix = prefix.asString;
+		this.keysValuesDo { |key, value|
+			if(key.asString.beginsWith(prefix)) {
+				func.(key, value)
+			}
+		}
+	}
 }
