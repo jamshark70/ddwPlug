@@ -16,6 +16,21 @@
 		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle) };
 		^array.add($])
 	}
+	// assumes no value conflicts
+	// e.g. list 1 = [a: 1], list 2 = [a: 2], result will be [a: 1]
+	mergePairs { |... pairLists|
+		var allKeys = IdentitySet.new;
+		var out = Array.new(pairLists.sum(_.size));
+		([this] ++ pairLists).do { |list|
+			list.pairsDo { |key, value|
+				if(allKeys.includes(key).not) {
+					out = out.add(key).add(value);
+					allKeys.add(key);
+				};
+			};
+		};
+		^out
+	}
 }
 
 + Object {

@@ -3,7 +3,7 @@ Pmsyn : FilterPattern {
 		var syns, ids, server, synCount;
 		var stream = pattern.asStream;
 		var event;
-		var argNameSet, desc, lib;
+		var desc, lib, msgFunc; //, argNameSet;
 		var mergeArgs = { |set, array|
 			set = set.copy;
 			array.do { |argname| set.add(argname.asSymbol) };
@@ -23,10 +23,11 @@ Pmsyn : FilterPattern {
 				lib = event[\synthLib] ?? { SynthDescLib.global };
 				desc = lib[event[\instrument].asSymbol];
 				if(desc.notNil) {
-					argNameSet = desc.msgFunc.def.argNames.as(IdentitySet);
+					msgFunc = desc.msgFunc; //.def.argNames.as(IdentitySet);
 				};
 				event.put(\type, \monoSyn)
-				.put(\args, mergeArgs.(argNameSet, event[\args]));
+				// .put(\args, mergeArgs.(argNameSet, event[\args]));
+				.put(\argPairs, msgFunc.valueWithEnvir(event));
 				inevent = event.yield;  // play it
 				syns = event[\syn];  // last played event
 				ids = event[\id];
@@ -37,7 +38,8 @@ Pmsyn : FilterPattern {
 				.put(\syn, syns)
 				.put(\id, ids)
 				.put(\server, server)
-				.put(\args, mergeArgs.(argNameSet, event[\args]));
+				// .put(\args, mergeArgs.(argNameSet, event[\args]));
+				.put(\argPairs, msgFunc.valueWithEnvir(event));
 				inevent = event.yield;
 			}
 			{ inevent = event.yield };  // passthru

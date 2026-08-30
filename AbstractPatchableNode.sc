@@ -658,7 +658,9 @@ AbstractPatchableNode {
 				freqs = ~freq = ~freq.value;
 				~server = server;
 				~amp = ~amp.value;
-				bndl = ~args.envirPairs.flop;
+				// argPairs may be explicitly set in the event
+				// ~args is a list of argument names to be collected here
+				bndl = ~argPairs.mergePairs(~args.envirPairs).flop;
 
 				bndl.do { |args, i|
 					// preprocess:
@@ -673,7 +675,6 @@ AbstractPatchableNode {
 						if(value.isKindOf(Plug)) {
 							oldPlug = syn.wrapAt(i).argAtPath(key);
 							if(compareSource.(value, oldPlug)) {
-								// no, don't: this triggers the pass-through behavior
 								currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
 									ar = ar.add(k).add(
 										if(v.isArray) { v.wrapAt(i) } { v }
@@ -718,10 +719,10 @@ AbstractPatchableNode {
 				addAction = Node.actionNumberFor(~addAction);
 
 				// compute the control values and generate OSC commands
-				// assumes caller has prepared ~args *with* SynthDesc arg names
+				// assumes caller has prepared ~argPairs from msgFunc
 				// special case event type, should only be used with Pmsyn
 				// which takes care of this
-				bndl = ~args.envirPairs;
+				bndl = ~argPairs.mergePairs(~args.envirPairs);
 
 				bndl.pairsDo { |key, value, i|
 					var plugKey = (key.asString ++ "Plug").asSymbol;
