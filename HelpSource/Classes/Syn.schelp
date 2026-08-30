@@ -71,6 +71,7 @@ Plugs may be generated dynamically by event keys ending in "Plug" -- see example
 
 note:: link::Classes/Pmono:: and link::Classes/PmonoArtic:: require a wrapper object, link::Classes/Pmsyn::, to be able to use Plug inputs. ::
 
+note:: link::Classes/Pmsyn:: now supports the insertion of Plugs during a slur. Prior to September 2026, in a pattern, Plugs could be created only at the beginning of a new note. (When using Syn directly, they could be created on the fly by link::#-set::.) Now, Plugs can be added without rearticulating. See the example in the link::Classes/Pmsyn:: help file. ::
 
 subsection:: Limitations
 
