@@ -677,7 +677,7 @@ AbstractPatchableNode {
 				~amp = ~amp.value;
 				// argPairs may be explicitly set in the event
 				// ~args is a list of argument names to be collected here
-				bndl = ~argPairs.mergePairs(~args.envirPairs).flop;
+				bndl = ~argPairs.mergePairs(~args.envirPairs).debug("bndl before flop").flop;
 
 				bndl.do { |args, i|
 					// preprocess:
@@ -687,14 +687,17 @@ AbstractPatchableNode {
 					var ar = Array(args.size);
 					var oneBundle;
 					args.pairsDo { |key, value|
-						var oldPlug;
-						value = findPlug.(key, value);
+						var newPlug, oldPlug;
+						newPlug = findPlug.(key, value);
 						oldPlug = syn.wrapAt(i).argAtPath(key);
-						if(value.isKindOf(Plug)) {
+						if(key == \ratio) { [newPlug, oldPlug].debug("new, old values") };
+						if(newPlug.isKindOf(Plug)) {
 							// if new Plug source matches old source,
-							// then we don't do anything
-							if(compareSource.(value, oldPlug).not) {
-								ar = ar.add(key).add(value);
+							// then we only pass a number through
+							if(compareSource.(value, oldPlug).debug("sources match").not) {
+								ar = ar.add(key).add(newPlug);
+							} {
+								0 // ar = ar.add(key).add(value);  // numeric value
 							};
 							// but in all cases we need to look for child args
 							currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
