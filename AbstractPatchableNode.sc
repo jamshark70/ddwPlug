@@ -480,7 +480,15 @@ AbstractPatchableNode {
 					var plugKey = (key.asString ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
 					if(plug.canMakePlug) {
-						bndl[i+1] = plug.dereference.valueEnvir(value)
+						value = plug.dereference.valueEnvir(value);
+						bndl[i+1] = value;
+					};
+					if(value.isKindOf(Plug)) {
+						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
+							bndl = bndl.add(k).add(
+								if(v.isArray) { v.wrapAt(i) } { v }
+							)
+						});
 					};
 				};
 
@@ -589,7 +597,15 @@ AbstractPatchableNode {
 					var plugKey = (key.asString ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
 					if(plug.canMakePlug) {
-						bndl[i+1] = plug.dereference.valueEnvir(value)
+						value = plug.dereference.valueEnvir(value);
+						bndl[i+1] = value;
+					};
+					if(value.isKindOf(Plug)) {
+						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
+							bndl = bndl.add(k).add(
+								if(v.isArray) { v.wrapAt(i) } { v }
+							)
+						});
 					};
 				};
 
@@ -654,6 +670,7 @@ AbstractPatchableNode {
 						{ a == b }
 					}
 				};
+				var plugsToFree, bundle;
 
 				freqs = ~freq = ~freq.value;
 				~server = server;
@@ -672,23 +689,29 @@ AbstractPatchableNode {
 					args.pairsDo { |key, value|
 						var oldPlug;
 						value = findPlug.(key, value);
+						oldPlug = syn.wrapAt(i).argAtPath(key);
 						if(value.isKindOf(Plug)) {
-							oldPlug = syn.wrapAt(i).argAtPath(key);
-							if(compareSource.(value, oldPlug)) {
-								currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
-									ar = ar.add(k).add(
-										if(v.isArray) { v.wrapAt(i) } { v }
-									);
-								});
-							} {
+							// if new Plug source matches old source,
+							// then we don't do anything
+							if(compareSource.(value, oldPlug).not) {
 								ar = ar.add(key).add(value);
 							};
+							// but in all cases we need to look for child args
+							currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
+								ar = ar.add(k).add(
+									if(v.isArray) { v.wrapAt(i) } { v }
+								);
+							});
 						} {
 							ar = ar.add(key).add(value);
+							if(oldPlug.isKindOf(Plug)) {
+								plugsToFree = plugsToFree.add(oldPlug);
+							};
 						};
 					};
-					syn.wrapAt(i).setToBundle(nil, *ar)
-					.sendOnTime(server, latency + ~lag + (~timingOffset / thisThread.clock.tempo))
+					plugsToFree.do { |plug| bundle = plug.freeToBundle(bundle) };
+					bundle = syn.wrapAt(i).setToBundle(bundle, *ar);
+					bundle.sendOnTime(server, latency + ~lag + (~timingOffset / thisThread.clock.tempo))
 				};
 			});
 
@@ -727,8 +750,17 @@ AbstractPatchableNode {
 				bndl.pairsDo { |key, value, i|
 					var plugKey = (key.asString ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
+					var testkey = key.asString ++ "/";
 					if(plug.canMakePlug) {
-						bndl[i+1] = plug.dereference.valueEnvir(value)
+						value = plug.dereference.valueEnvir(value);
+						bndl[i+1] = value;
+					};
+					if(value.isKindOf(Plug)) {
+						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
+							bndl = bndl.add(k).add(
+								if(v.isArray) { v.wrapAt(i) } { v }
+							)
+						});
 					};
 				};
 
@@ -738,7 +770,7 @@ AbstractPatchableNode {
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
 				~syn = bndl.collect { |args|
-					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
+					var n = Syn.basicNewByArgPaths(instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle);
 					n.registerNodes  // returns n
 				};
