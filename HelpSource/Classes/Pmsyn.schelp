@@ -91,3 +91,85 @@ p = Pmsyn(
 ).play;
 )
 ::
+
+Following is an example of applying a Plug midstream.
+
+To do this interactively, you need a pattern that can be modified from outside itself. SuperCollider doesn't provide such a pattern for monophonic sequencing. However, a link::Classes/PbindProxy:: can generate the sequence data, and this can be chained into a Pmono modify the standard Pbind data into a monophonic sequence (which is then compatible with Pmsyn). code::p.set():: adds or overwrites information in the base stream. Using "...Plug" syntax (link::Classes/Syn#Events and xxxPlug keys::) creates the Plug. Because the Plug function is properly closed (no references to variables from containing scopes), only one Plug will be created; it will run continuously. Removing the "...Plug" key causes the Plug to be released, and the parameter to return to its prior behavior.
+
+code::
+(
+SynthDef(\pm, { |out, gate = 1, freq = 440, freqlag = 0.08, ratio = 1, index = 1, amp = 0.1|
+	var freq2 = Lag.kr(freq, freqlag);
+	var sig = PMOsc.ar(freq2, freq2 * Lag.kr(ratio, freqlag), index);
+	var eg = EnvGen.kr(Env.adsr(0.01, 0.15, 0.7, 0.1), gate, doneAction: 2);
+	Out.ar(out, (sig * eg * amp).dup);
+}).add;
+)
+
+(
+// changeable event stream (Pmono provides 'instrument' later)
+p = PbindProxy(
+	\midinote, 60,  // fixed pitch, using mono for timbral modulation
+	\ratio, Pexprand(0.5, 2, inf),
+	\freqlag, 0.1,
+	\index, 2.5,
+	\dur, Pwrand((1..5), (5, 4..1).normalizeSum, inf) * 0.15,
+	\amp, 0.1,
+);
+p.quant = 0;
+
+// wrap in a monophonic player (Pchain), and Syn-ify it (Pmsyn)
+q = Pmsyn(Pchain(Pmono(\pm, \dummy, 1), p)).play;
+);
+
+// "...Plug" syntax (see Syn help examples)
+(
+p.set(\ratioPlug, { |ratio|
+	Plug({ |ratio|
+		ratio * Demand.kr(
+			Impulse.kr(12), 0,
+			Dseq([Dseries(1, 0.15, 12)], inf)
+		)
+	}, [ratio: ratio])
+});
+)
+
+p.set(\ratioPlug, 0);  // removes the Plug on next event
+
+q.stop;
+::
+
+Or the "...Plug" key can be sequenced. (Note that Pfuncn supplies the "...Plug" function. The function is not evaluated within the pattern, but rather put directly into the Event.)
+
+code::
+(
+p = Pmsyn(Pmono(
+	\pm,
+	\midinote, 60,
+	\ratio, Pexprand(0.5, 2, inf),
+	\freqlag, 0.1,
+	\index, 2.5,
+	\dur, Pwrand((1..5), (5, 4..1).normalizeSum, inf) * 0.15,
+	\amp, 0.1,
+	
+	\ratioPlug, Pdup(
+		Pwhite(2, 10, inf),
+		Pseq([
+			0,  // alternate between no-plug and plug
+			Pfuncn({
+				{ |ratio|
+					Plug({ |ratio|
+						ratio * Demand.kr(
+							Impulse.kr(12), 0,
+							Dseq([Dseries(1, 0.15, 12)], inf)
+						)
+					}, [ratio: ratio])
+				}
+			}, 1)
+		], inf)
+	)
+)).play;
+)
+
+p.stop;
+::

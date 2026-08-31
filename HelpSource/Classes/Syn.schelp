@@ -79,7 +79,7 @@ Feedback between Plugs is not supported.
 
 While it is supported to define Plugs based on a synthesis function, and Syn will attempt to maintain timing according to latency, a very complex Syn with a large number of function-based Plugs may take too long to prepare. For efficiency, it is recommended to use SynthDefs as much as possible in production settings.
 
-However (new as of April 2025), Plugs based on functions will attempt to cache and reuse their temporary SynthDefs. This will improve efficiency of, for instance, patterns using function-based Plugs. See link::Classes/Plug#Plugs based on Functions::.
+However (new as of April 2025), Plugs based on functions will attempt to cache and reuse their temporary SynthDefs. This will improve efficiency of, for instance, patterns using function-based Plugs (and is essential to their use in monophonic sequencers). See link::Classes/Plug#Plugs based on Functions::.
 
 
 CLASSMETHODS::
@@ -726,7 +726,7 @@ p = Pbind(
 p.stop; x.release;
 ::
 
-subsection:: Events and "xxxPlug" keys
+subsection:: Events and xxxPlug keys
 
 In the previous example, you have direct control over the Syn's structure. An Event creates Syn objects for you. This poses a problem: How to specify a parameter's baseline value using normal pattern calculations, and apply Plug modulation to it?
 
