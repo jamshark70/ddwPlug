@@ -655,7 +655,7 @@ AbstractPatchableNode {
 					var plugKey = (key ++ "Plug").asSymbol;
 					var plug = plugKey.envirGet;
 					if(plug.canMakePlug) {
-						plug.dereference.valueEnvir(value)
+						plug.dereference.valueEnvir
 					} {
 						value
 					}
@@ -677,7 +677,7 @@ AbstractPatchableNode {
 				~amp = ~amp.value;
 				// argPairs may be explicitly set in the event
 				// ~args is a list of argument names to be collected here
-				bndl = ~argPairs.mergePairs(~args.envirPairs).debug("bndl before flop").flop;
+				bndl = ~argPairs.mergePairs(~args.envirPairs).flop;
 
 				bndl.do { |args, i|
 					// preprocess:
@@ -690,14 +690,13 @@ AbstractPatchableNode {
 						var newPlug, oldPlug;
 						newPlug = findPlug.(key, value);
 						oldPlug = syn.wrapAt(i).argAtPath(key);
-						if(key == \ratio) { [newPlug, oldPlug].debug("new, old values") };
 						if(newPlug.isKindOf(Plug)) {
 							// if new Plug source matches old source,
 							// then we only pass a number through
-							if(compareSource.(value, oldPlug).debug("sources match").not) {
+							if(compareSource.(newPlug, oldPlug).not) {
 								ar = ar.add(key).add(newPlug);
 							} {
-								0 // ar = ar.add(key).add(value);  // numeric value
+								ar = ar.add(key).add(value);  // numeric value
 							};
 							// but in all cases we need to look for child args
 							currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
