@@ -451,6 +451,7 @@ AbstractPatchableNode {
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
+				var newMethod;
 
 				// note, detunedFreq not supported
 				freqs = ~freq.value;
@@ -497,8 +498,9 @@ AbstractPatchableNode {
 				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
+				newMethod = if(~usePaths ?? { false }) { \basicNewByArgPaths } { \basicNew };
 				~syn = bndl.collect { |args|
-					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
+					var n = Syn.perform(newMethod, instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle);
 					n.registerNodes  // returns n
 				};
@@ -522,10 +524,13 @@ AbstractPatchableNode {
 							lag,
 							sustain + offset,
 							server,
+							#[[error, -1]]
+							++
 							[15 /* \n_set */,
 								~syn.collect { |n| n.node.nodeID },
 								\gate, 0
-							].flop,
+							].flop
+							++ #[[error, -2]],
 							~latency
 						);
 					}
@@ -568,6 +573,7 @@ AbstractPatchableNode {
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
+				var newMethod;
 
 				// note, detunedFreq not supported
 				freqs = ~freq.value;
@@ -614,8 +620,9 @@ AbstractPatchableNode {
 				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
+				newMethod = if(~usePaths ?? { false }) { \basicNewByArgPaths } { \basicNew };
 				~syn = bndl.collect { |args|
-					var n = Syn.basicNew(instrumentName, args, ~group, ~addAction);
+					var n = Syn.perform(newMethod, instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle);
 					n.registerNodes  // returns n
 				};
@@ -717,6 +724,7 @@ AbstractPatchableNode {
 				};
 			});
 
+			// no 'newMethod' because monoSyn already goes by argpaths
 			Event.addEventType(\monoSyn, { |server|
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;

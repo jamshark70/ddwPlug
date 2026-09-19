@@ -762,6 +762,39 @@ code::\degree:: will control the default SynthDef's code::freq:: input, to which
 
 note:: link::Classes/Pmono:: and link::Classes/PmonoArtic:: require a wrapper object, link::Classes/Pmsyn::, to be able to use Plug inputs. ::
 
+If you want to use input names as paths in a pattern, set code::\usePaths, true:: in the pattern.
+
+code::
+// plays with freq/lfoRate == 1
+
+(
+(
+type: \syn,
+instrument: \default,
+freq: Plug { |lfoRate = 1|
+	LFDNoise3.kr(lfoRate).exprange(300, 700)
+},
+'freq/lfoRate': 7,
+sustain: 5
+).play;
+)
+
+// plays with freq/lfoRate == 7
+
+(
+(
+type: \syn,
+usePaths: true,
+instrument: \default,
+freq: Plug { |lfoRate = 1|
+	LFDNoise3.kr(lfoRate).exprange(300, 700)
+},
+'freq/lfoRate': 7,
+sustain: 5
+).play;
+)
+::
+
 
 subsection:: NRT (Non-Real-Time)
 
