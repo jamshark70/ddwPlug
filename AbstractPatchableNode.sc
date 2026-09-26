@@ -451,7 +451,7 @@ AbstractPatchableNode {
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
-				var newMethod;
+				var usePaths, newMethod;
 
 				// note, detunedFreq not supported
 				freqs = ~freq.value;
@@ -473,6 +473,7 @@ AbstractPatchableNode {
 				~latency = ~latency ?? { server.latency };  // seriously...?
 				~isPlaying = true;
 				addAction = Node.actionNumberFor(~addAction);
+				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
 				bndl = msgFunc.valueEnvir;
@@ -484,7 +485,7 @@ AbstractPatchableNode {
 						value = plug.dereference.valueEnvir(value);
 						bndl[i+1] = value;
 					};
-					if(value.isKindOf(Plug)) {
+					if(usePaths and: { value.isKindOf(Plug) }) {
 						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
 							bndl = bndl.add(k).add(
 								if(v.isArray) { v.wrapAt(i) } { v }
@@ -498,7 +499,7 @@ AbstractPatchableNode {
 				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
-				newMethod = if(~usePaths ?? { false }) { \basicNewByArgPaths } { \basicNew };
+				newMethod = if(usePaths) { \basicNewByArgPaths } { \basicNew };
 				~syn = bndl.collect { |args|
 					var n = Syn.perform(newMethod, instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle);
@@ -573,7 +574,7 @@ AbstractPatchableNode {
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;
 				var msgFunc, instrumentName, offset, strumOffset, releaseOffset;
-				var newMethod;
+				var usePaths, newMethod;
 
 				// note, detunedFreq not supported
 				freqs = ~freq.value;
@@ -595,6 +596,7 @@ AbstractPatchableNode {
 				~latency = ~latency ?? { server.latency };  // seriously...?
 				~isPlaying = true;
 				addAction = Node.actionNumberFor(~addAction);
+				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
 				bndl = msgFunc.valueEnvir;
@@ -606,7 +608,7 @@ AbstractPatchableNode {
 						value = plug.dereference.valueEnvir(value);
 						bndl[i+1] = value;
 					};
-					if(value.isKindOf(Plug)) {
+					if(usePaths and: { value.isKindOf(Plug) }) {
 						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
 							bndl = bndl.add(k).add(
 								if(v.isArray) { v.wrapAt(i) } { v }
@@ -620,7 +622,7 @@ AbstractPatchableNode {
 				~group = Group.basicNew(~server, ~group.asNodeID);
 				bndl = bndl.flop;
 				oscBundles = Array(bndl.size);
-				newMethod = if(~usePaths ?? { false }) { \basicNewByArgPaths } { \basicNew };
+				newMethod = if(usePaths) { \basicNewByArgPaths } { \basicNew };
 				~syn = bndl.collect { |args|
 					var n = Syn.perform(newMethod, instrumentName, args, ~group, ~addAction);
 					oscBundles.add(n.prepareToBundle);
@@ -724,7 +726,7 @@ AbstractPatchableNode {
 				};
 			});
 
-			// no 'newMethod' because monoSyn already goes by argpaths
+			// no 'newMethod' because monoSyn always goes by argpaths ('usePaths' is assumed true)
 			Event.addEventType(\monoSyn, { |server|
 				var freqs, lag, strum, sustain;
 				var bndl, oscBundles, addAction, sendGate, ids, i;
