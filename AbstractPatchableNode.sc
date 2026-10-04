@@ -635,7 +635,7 @@ AbstractPatchableNode {
 					} {
 						switch(a.source.class)
 						{ Function } { a.source.compareObject(b.source) }
-						{ a == b }
+						{ a.source == b.source }
 					}
 				};
 				var plugsToFree, bundle;
@@ -653,7 +653,7 @@ AbstractPatchableNode {
 					// verify whether Plugs need to replace or keep source
 					// doing this separately for each syn
 					var ar = args.processPlugArgs(currentEnvironment, true, true, {
-						|key, value, newPlug, i, out, remove|
+						|key, value, newPlug, j, out, remove|
 
 						var oldPlug = syn.wrapAt(i).argAtPath(key);
 
@@ -672,6 +672,7 @@ AbstractPatchableNode {
 								plugsToFree = plugsToFree.add(oldPlug);
 							};
 						};
+						[out, newPlug ?? { value }]
 					});
 					plugsToFree.do { |plug| bundle = plug.freeToBundle(bundle) };
 					bundle = syn.wrapAt(i).setToBundle(bundle, *ar);
