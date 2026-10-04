@@ -16,6 +16,53 @@
 		this.do { | e | array = e.asOSCPlugEmbeddedArray(array, dest, downstream, bundle) };
 		^array.add($])
 	}
+
+	processPlugArgs { |event(currentEnvironment), usePaths = true, passValue = false, hook|
+		var out = Array(this.size);
+		var remove = IdentitySet.new, i;
+		hook ?? {
+			// note: callers that override 'hook' should NOT maintain their own 'out' and 'remove'
+			// 2 return values are needed;
+			// I'll prefer to return an array of them, rather than passing 'out' by reference
+			// (either way there's a temp object to garbage collect)
+			hook = { |key, value, plug, i, out, remove|
+				out = out.add(key);
+				if(plug.notNil) {
+					out = out.add(plug);
+					value = plug;
+					remove.add((key ++ "Plug").asSymbol);
+				} {
+					out = out.add(value);
+				};
+				[out, value]
+			}
+		};
+		this.pairsDo { |key, value, i|
+			var plug = event.fixPlug(key, value, true);
+			var sub;  // args below this level in the tree
+			var x;
+			#out, x = hook.(key, value, plug, i, out, remove);
+			if(usePaths and: { x.isKindOf(Plug) }) {
+				event.doForPrefix((key.asString ++ "/"), { |k, v|
+					sub = sub.add(k).add(
+						if(v.isArray) { v.wrapAt(i) } { v }
+					)
+				});
+				sub = sub.processPlugArgs(event, usePaths, passValue);
+				out = out.mergePairs(sub);
+			};
+		};
+		i = out.size - 2;
+		while { i > 0 } {
+			if(remove.includes(out[i]) and: { out[i+1].canMakePlug }) {
+				out.removeAt(i);
+				out.removeAt(i);
+			};
+			i = i - 2;
+		};
+		^out
+	}
+
 	// assumes no value conflicts
 	// e.g. list 1 = [a: 1], list 2 = [a: 2], result will be [a: 1]
 	mergePairs { |... pairLists|
@@ -32,6 +79,8 @@
 		^out
 	}
 }
+
++ Nil { processPlugArgs {} }
 
 + Object {
 	asPluggable { ^this.asControlInput }
@@ -192,6 +241,32 @@
 			if(key.asString.beginsWith(prefix)) {
 				func.(key, value)
 			}
-		}
+		};
 	}
 }
+
++ Event {
+	fixPlug { |key, value, passValue = false|
+		var plugKey = (key.asString ++ "Plug").asSymbol;
+		var plug = plugKey.envirGet;
+		if(plug.canMakePlug) {
+			if(passValue) {
+				// "premature optimization" blah blah
+				// 'use' is expensive, save the call if possible
+				if(currentEnvironment === this) {
+					value = plug.dereference.valueEnvir(value);
+				} {
+					this.use {
+						value = plug.dereference.valueEnvir(value);
+					};
+				};
+			} {
+				value = plug.dereference.valueWithEnvir(this);
+			};
+		} {
+			value = nil
+		};
+		^value
+	}
+}
+

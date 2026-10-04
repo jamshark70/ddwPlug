@@ -476,23 +476,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir;
-
-				bndl.pairsDo { |key, value, i|
-					var plugKey = (key.asString ++ "Plug").asSymbol;
-					var plug = plugKey.envirGet;
-					if(plug.canMakePlug) {
-						value = plug.dereference.valueEnvir(value);
-						bndl[i+1] = value;
-					};
-					if(usePaths and: { value.isKindOf(Plug) }) {
-						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
-							bndl = bndl.add(k).add(
-								if(v.isArray) { v.wrapAt(i) } { v }
-							)
-						});
-					};
-				};
+				bndl = msgFunc.valueEnvir.processPlugArgs(passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -599,23 +583,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir;
-
-				bndl.pairsDo { |key, value, i|
-					var plugKey = (key.asString ++ "Plug").asSymbol;
-					var plug = plugKey.envirGet;
-					if(plug.canMakePlug) {
-						value = plug.dereference.valueEnvir(value);
-						bndl[i+1] = value;
-					};
-					if(usePaths and: { value.isKindOf(Plug) }) {
-						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
-							bndl = bndl.add(k).add(
-								if(v.isArray) { v.wrapAt(i) } { v }
-							)
-						});
-					};
-				};
+				bndl = msgFunc.valueEnvir.processPlugArgs(passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -660,15 +628,6 @@ AbstractPatchableNode {
 				var freqs, bndl;
 				var latency = ~latency ?? { server.latency };
 				var syn = ~syn.asArray;
-				var findPlug = { |key, value|
-					var plugKey = (key ++ "Plug").asSymbol;
-					var plug = plugKey.envirGet;
-					if(plug.canMakePlug) {
-						plug.dereference.valueEnvir
-					} {
-						value
-					}
-				};
 				// code duplication: SynVoicerNode:setMsg
 				var compareSource = { |a, b|
 					if(a.class != b.class) {  // btw 'a' should always be a Plug
@@ -693,33 +652,27 @@ AbstractPatchableNode {
 					// look for "...Plug" args
 					// verify whether Plugs need to replace or keep source
 					// doing this separately for each syn
-					var ar = Array(args.size);
-					var oneBundle;
-					args.pairsDo { |key, value|
-						var newPlug, oldPlug;
-						newPlug = findPlug.(key, value);
-						oldPlug = syn.wrapAt(i).argAtPath(key);
+					var ar = args.processPlugArgs(currentEnvironment, true, true, {
+						|key, value, newPlug, i, out, remove|
+
+						var oldPlug = syn.wrapAt(i).argAtPath(key);
+
 						if(newPlug.isKindOf(Plug)) {
 							// if new Plug source matches old source,
 							// then we only pass a number through
 							if(compareSource.(newPlug, oldPlug).not) {
-								ar = ar.add(key).add(newPlug);
+								out = out.add(key).add(newPlug);
 							} {
-								ar = ar.add(key).add(value);  // numeric value
+								out = out.add(key).add(value);  // numeric value
 							};
-							// but in all cases we need to look for child args
-							currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
-								ar = ar.add(k).add(
-									if(v.isArray) { v.wrapAt(i) } { v }
-								);
-							});
+							// recursion is now in processPlugArgs
 						} {
-							ar = ar.add(key).add(value);
+							out = out.add(key).add(value);
 							if(oldPlug.isKindOf(Plug)) {
 								plugsToFree = plugsToFree.add(oldPlug);
 							};
 						};
-					};
+					});
 					plugsToFree.do { |plug| bundle = plug.freeToBundle(bundle) };
 					bundle = syn.wrapAt(i).setToBundle(bundle, *ar);
 					bundle.sendOnTime(server, latency + ~lag + (~timingOffset / thisThread.clock.tempo))
@@ -758,23 +711,7 @@ AbstractPatchableNode {
 				// special case event type, should only be used with Pmsyn
 				// which takes care of this
 				bndl = ~argPairs.mergePairs(~args.envirPairs);
-
-				bndl.pairsDo { |key, value, i|
-					var plugKey = (key.asString ++ "Plug").asSymbol;
-					var plug = plugKey.envirGet;
-					var testkey = key.asString ++ "/";
-					if(plug.canMakePlug) {
-						value = plug.dereference.valueEnvir(value);
-						bndl[i+1] = value;
-					};
-					if(value.isKindOf(Plug)) {
-						currentEnvironment.doForPrefix(key.asString ++ "/", { |k, v|
-							bndl = bndl.add(k).add(
-								if(v.isArray) { v.wrapAt(i) } { v }
-							)
-						});
-					};
-				};
+				bndl = bndl.processPlugArgs(passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
