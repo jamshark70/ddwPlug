@@ -17,7 +17,7 @@
 		^array.add($])
 	}
 
-	processPlugArgs { |event(currentEnvironment), usePaths = true, passValue = false, hook|
+	processPlugArgs { |event, usePaths = true, passValue = false, hook|
 		var out = Array(this.size);
 		var remove = IdentitySet.new, i;
 		hook ?? {
@@ -42,7 +42,7 @@
 			var sub;  // args below this level in the tree
 			var x;
 			#out, x = hook.(key, value, plug, i, out, remove);
-			if(usePaths and: { x.isKindOf(Plug) }) {
+			if(usePaths and: { event.notNil and: { x.isKindOf(Plug) } }) {
 				event.doForPrefix((key.asString ++ "/"), { |k, v|
 					sub = sub.add(k).add(
 						if(v.isArray) { v.wrapAt(i) } { v }
@@ -80,7 +80,10 @@
 	}
 }
 
-+ Nil { processPlugArgs {} }
++ Nil {
+	processPlugArgs {}
+	fixPlug {}
+}
 
 + Object {
 	asPluggable { ^this.asControlInput }

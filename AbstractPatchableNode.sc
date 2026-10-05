@@ -476,7 +476,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir.processPlugArgs(passValue: true);
+				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment, passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -583,7 +583,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir.processPlugArgs(passValue: true);
+				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment, passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -712,7 +712,7 @@ AbstractPatchableNode {
 				// special case event type, should only be used with Pmsyn
 				// which takes care of this
 				bndl = ~argPairs.mergePairs(~args.envirPairs);
-				bndl = bndl.processPlugArgs(passValue: true);
+				bndl = bndl.processPlugArgs(currentEnvironment, passValue: true);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
