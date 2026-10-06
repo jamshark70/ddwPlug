@@ -17,7 +17,7 @@
 		^array.add($])
 	}
 
-	processPlugArgs { |event, usePaths = true, passValue = false, hook|
+	processPlugArgs { |event, usePaths = true, hook|
 		var out = Array(this.size);
 		var remove = IdentitySet.new, i;
 		hook ?? {
@@ -38,7 +38,7 @@
 			}
 		};
 		this.pairsDo { |key, value, i|
-			var plug = event.fixPlug(key, value, true);
+			var plug = event.fixPlug(key, value);
 			var sub;  // args below this level in the tree
 			var x;
 			#out, x = hook.(key, value, plug, i, out, remove);
@@ -48,7 +48,7 @@
 						if(v.isArray) { v.wrapAt(i) } { v }
 					)
 				});
-				sub = sub.processPlugArgs(event, usePaths, passValue);
+				sub = sub.processPlugArgs(event, usePaths);
 				out = out.mergePairs(sub);
 			};
 		};
@@ -249,22 +249,17 @@
 }
 
 + Event {
-	fixPlug { |key, value, passValue = false|
+	fixPlug { |key, value|
 		var plugKey = (key.asString ++ "Plug").asSymbol;
 		var plug = plugKey.envirGet;
 		if(plug.canMakePlug) {
-			if(passValue) {
-				// "premature optimization" blah blah
-				// 'use' is expensive, save the call if possible
-				if(currentEnvironment === this) {
-					value = plug.dereference.valueEnvir(value);
-				} {
-					this.use {
-						value = plug.dereference.valueEnvir(value);
-					};
-				};
+			// 'use' is expensive, save the call if possible
+			if(currentEnvironment === this) {
+				value = plug.dereference.valueEnvir(value);
 			} {
-				value = plug.dereference.valueWithEnvir(this);
+				this.use {
+					value = plug.dereference.valueEnvir(value);
+				};
 			};
 		} {
 			value = nil

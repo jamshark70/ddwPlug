@@ -476,7 +476,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment, passValue: true);
+				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -583,7 +583,7 @@ AbstractPatchableNode {
 				usePaths = ~usePaths ?? { false };
 
 				// compute the control values and generate OSC commands
-				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment, passValue: true);
+				bndl = msgFunc.valueEnvir.processPlugArgs(currentEnvironment);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
@@ -652,7 +652,7 @@ AbstractPatchableNode {
 					// look for "...Plug" args
 					// verify whether Plugs need to replace or keep source
 					// doing this separately for each syn
-					var ar = args.processPlugArgs(currentEnvironment, true, true, {
+					var ar = args.processPlugArgs(currentEnvironment, true, {
 						|key, value, newPlug, j, out, remove|
 
 						var oldPlug = syn.wrapAt(i).argAtPath(key);
@@ -712,7 +712,7 @@ AbstractPatchableNode {
 				// special case event type, should only be used with Pmsyn
 				// which takes care of this
 				bndl = ~argPairs.mergePairs(~args.envirPairs);
-				bndl = bndl.processPlugArgs(currentEnvironment, passValue: true);
+				bndl = bndl.processPlugArgs(currentEnvironment);
 
 				~group = ~group.value;
 				// why? because ~group is (by default) the defaultGroup's ID, not the object
