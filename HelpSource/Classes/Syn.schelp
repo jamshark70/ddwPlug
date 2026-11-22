@@ -257,6 +257,13 @@ A link::Classes/List:: or nil.
 returns:: The bundle, as a List.
 
 
+METHOD:: onFree
+Matching the link::Classes/Node#-onFree:: interface. Adds a Function to execute when the Syn ends. Individual Plugs may also add their own onFree functions.
+
+ARGUMENT:: func
+The function to add.
+
+
 METHOD:: set
 Set controls in the Syn.
 

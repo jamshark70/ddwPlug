@@ -11,6 +11,7 @@ AbstractPatchableNode {
 	var <antecedents, <descendants;
 	var <controls;  // flat dictionary of ctl paths --> node-or-plug arrays
 	var <synthDesc;
+	var onFree;
 
 	free { |latency ... why|
 		// note: I had assumed that '.oneShot' would free the watcher, if any
@@ -21,7 +22,10 @@ AbstractPatchableNode {
 	}
 	didFree { |... why|
 		this.changed(\didFree, *why);
+		onFree.value(this);
 	}
+	// match Synth interface
+	onFree { |func| onFree = onFree.addFunc(func) }
 
 	// 'free' support -- see Plug and Syn for removeDescendant
 	removeAntecedent { |plug|
