@@ -329,6 +329,45 @@ Name-value pairs.
 returns:: A List of OSC messages.
 
 
+METHOD:: get
+Access a control's current value. If the control has a concrete numeric value, this will be retrieved from the object's cache and passed into the action function directly. If the value is not available in the cache, it will be retrieved from the server.
+
+table::
+## strong::Value:: || strong::Action::
+## Number || Cached value is passed to code::action::
+## Array of numbers || Cached array is passed to code::action::
+## Plug || code::/c_get:: is called on the Plug's bus
+## Bus mapping token || code::/c_get:: is called on the given bus
+## Array of bus tokens || code::/c_get:: is called on the list of buses
+## Unspecified || code::/s_get:: is called to get the synth's value
+::
+
+ARGUMENT:: path
+A Symbol, for the name or path of the argument to look up. Only one is supported; currently, there is no code::getn::. A path does not follow pass-through rules as described in link::#Three-point modulation:: (so that you can access Plug values at any level, not only at the head of a chain).
+
+ARGUMENT:: action
+A function to execute with the retrieved value. This will be called synchronously if the value is available in cache, or asynchronously if it was retrieved from the server. It is not safe to assume synchronous execution.
+
+Example:
+
+code::
+a = Syn(\default, [freq: Plug { LFDNoise3.kr(1).exprange(200, 800) }]);
+
+(
+r = fork {
+	loop {
+		// prints different values every time
+		// because it's polling the Plug's bus
+		a.get(\freq, _.postln);
+		0.25.wait;
+	}
+};
+)
+
+r.stop; a.free;
+::
+
+
 METHOD:: cleanup
 Force the Syn's associated objects to clean themselves up, without actually sending a code::free:: message to the main Syn node. Normally, there is no need to call this method directly; however, code::cleanupToBundle:: is useful for non-real-time rendering.
 

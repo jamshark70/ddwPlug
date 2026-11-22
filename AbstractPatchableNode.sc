@@ -242,6 +242,86 @@ AbstractPatchableNode {
 		this.setnToBundle(nil, *args).sendOnTime(this.server, nil)
 	}
 
+	// path = 'ctl0/ctl1/ctl2'
+	// ctl2 is the control name in the synth
+	// managed by the object at ctl1 = objectForPath
+	// Step 1. Get the responsible object.
+	// Step 2. If it exists, delegate.
+	get { |path, action|
+		var obj = this.objectForPath(path);
+		var str, i, first, map;
+
+		if(obj.isNil) {
+			action.value(nil)
+		} {
+			// only last key
+			str = path.asString;
+			i = str.size;
+			while {
+				i = i - 1;
+				i >= 0 and: { str[i] != $/ }
+			};
+			if(i >= 0) { str = str[i+1..] };
+			obj.prGet(str.asSymbol, action)
+		}
+	}
+
+	// argName must be the argument *in this object*
+	// this method does no object lookup
+	prGet { |argName, action|
+		var value = this.argAt(argName);
+		var mapStrings, resp;
+		case
+		// arg is set to a Plug: look up the value on the bus
+		{ value.isKindOf(Plug) } {
+			value.bus.getn(value.bus.numChannels, { |data|
+				action.value(data.unbubble)
+			})
+		}
+		// bus mapping: may be either c0 or [c0, c1]
+		// I'm gonna go with a small amount of code duplication here
+		// single-channel first
+		{ (value.isSymbol or: { value.isString }) and: {
+			mapStrings = value.asString;
+			mapStrings[0] == $c
+		} } {
+			Bus(\control, mapStrings[1..].asInteger, 1, this.server)
+			.get(action)
+		}
+		// multiple channels
+		{ value.isArray } {
+			mapStrings = Array(value.size);
+			block { |break|
+				value.do { |item|
+					var str;
+					if(item.isSymbol or: { item.isString }) {
+						str = item.asString;
+						if(str[0] == $c) {
+							mapStrings.add(str)
+						} {
+							break.value
+						}
+					}
+				}
+			};
+			if(mapStrings.size == value.size) {
+				// all strings passed the test
+				mapStrings = mapStrings.collect { |str| str[1..].asInteger };
+				resp = OSCFunc({ |msg|
+					resp.free;
+					action.value(msg[2, 4..]);
+				}, '/c_set', this.server.addr, argTemplate: [mapStrings[0]]);
+				this.server.sendMsg("/c_get", *mapStrings);
+			} {
+				action.value(value)  // pass array through to action
+			}
+		}
+		// single value: direct pass-through
+		{ value.notNil } { action.value(value) }
+		// null case: get from synth
+		{ node.get(argName, action) }
+	}
+
 	// when you '.set' we need to keep a list of paths --> nodes to set
 	// IDict[
 	//     \nameToSet -> IDict[
